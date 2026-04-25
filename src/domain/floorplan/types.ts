@@ -58,6 +58,10 @@ export interface FurnitureItem {
   width: number
   height: number
   elevation: number
+  customName?: string
+  productImageUrl?: string
+  productUrl?: string
+  notes?: string
 }
 
 export interface FurnitureCatalogEntry {

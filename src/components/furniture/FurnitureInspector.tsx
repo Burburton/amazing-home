@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { FurnitureItem } from '@domain/floorplan/types'
 import { getCatalogEntry } from '@domain/floorplan/furniture-catalog'
 
@@ -8,6 +9,8 @@ interface FurnitureInspectorProps {
 }
 
 function FurnitureInspector({ furniture, onUpdate, onDelete }: FurnitureInspectorProps) {
+  const [showImageInput, setShowImageInput] = useState(false)
+  
   if (!furniture) {
     return (
       <div className="text-sm text-gray-400 p-4">
@@ -18,15 +21,58 @@ function FurnitureInspector({ furniture, onUpdate, onDelete }: FurnitureInspecto
 
   const catalogEntry = getCatalogEntry(furniture.category)
   const icon = catalogEntry?.icon || '📦'
+  const displayName = furniture.customName || furniture.name
 
   return (
     <div className="space-y-4 p-4">
       <div className="flex items-center gap-2">
         <span className="text-2xl">{icon}</span>
-        <div>
-          <div className="text-sm font-medium text-gray-700">{furniture.name}</div>
+        <div className="flex-1">
+          <div className="text-sm font-medium text-gray-700">{displayName}</div>
           <div className="text-xs text-gray-400">{furniture.category}</div>
         </div>
+      </div>
+      
+      {furniture.productImageUrl && (
+        <div className="relative">
+          <img 
+            src={furniture.productImageUrl} 
+            alt={displayName}
+            className="w-full h-32 object-cover rounded border border-gray-200"
+            onError={(e) => {
+              e.currentTarget.src = ''
+              e.currentTarget.style.display = 'none'
+            }}
+          />
+          <button
+            onClick={() => onUpdate({ productImageUrl: undefined })}
+            className="absolute top-1 right-1 px-2 py-1 bg-red-100 text-red-600 text-xs rounded hover:bg-red-200"
+          >
+            Remove
+          </button>
+        </div>
+      )}
+      
+      {furniture.productUrl && (
+        <a 
+          href={furniture.productUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block text-xs text-blue-600 hover:underline truncate"
+        >
+          View Product ↗
+        </a>
+      )}
+      
+      <div>
+        <label className="block text-xs text-gray-500 mb-1">Custom Name</label>
+        <input
+          type="text"
+          value={furniture.customName || ''}
+          onChange={(e) => onUpdate({ customName: e.target.value })}
+          placeholder={furniture.name}
+          className="w-full px-2 py-1 text-sm border border-gray-200 rounded"
+        />
       </div>
       
       <div>
@@ -110,6 +156,63 @@ function FurnitureInspector({ furniture, onUpdate, onDelete }: FurnitureInspecto
           Reset to Default Size
         </button>
       )}
+      
+      <div className="border-t border-gray-200 pt-4">
+        <div className="text-xs font-medium text-gray-600 mb-2">Product Reference</div>
+        
+        {!furniture.productImageUrl && !showImageInput && (
+          <button
+            onClick={() => setShowImageInput(true)}
+            className="w-full px-3 py-2 text-sm bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors"
+          >
+            Add Product Image
+          </button>
+        )}
+        
+        {showImageInput && !furniture.productImageUrl && (
+          <div className="space-y-2">
+            <input
+              type="url"
+              placeholder="Product image URL"
+              className="w-full px-2 py-1 text-sm border border-gray-200 rounded"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  onUpdate({ productImageUrl: e.currentTarget.value })
+                  setShowImageInput(false)
+                }
+              }}
+            />
+            <button
+              onClick={() => setShowImageInput(false)}
+              className="w-full px-2 py-1 text-xs bg-gray-50 text-gray-500 rounded"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+        
+        <div className="mt-2">
+          <label className="block text-xs text-gray-500 mb-1">Product URL</label>
+          <input
+            type="url"
+            value={furniture.productUrl || ''}
+            onChange={(e) => onUpdate({ productUrl: e.target.value })}
+            placeholder="https://..."
+            className="w-full px-2 py-1 text-sm border border-gray-200 rounded"
+          />
+        </div>
+        
+        <div className="mt-2">
+          <label className="block text-xs text-gray-500 mb-1">Notes</label>
+          <textarea
+            value={furniture.notes || ''}
+            onChange={(e) => onUpdate({ notes: e.target.value })}
+            placeholder="Add notes about this item..."
+            rows={2}
+            className="w-full px-2 py-1 text-sm border border-gray-200 rounded resize-none"
+          />
+        </div>
+      </div>
       
       <button
         onClick={onDelete}
