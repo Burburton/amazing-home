@@ -2,6 +2,8 @@
 
 **Browser-based Home Layout Preview Tool**
 
+🚀 **Live Demo**: https://burburton.github.io/amazing-home/
+
 A lightweight web application for visualizing home layouts: upload floor plans, trace walls manually, generate 3D shells, place furniture, and export previews.
 
 ---
