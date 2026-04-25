@@ -1,6 +1,7 @@
 import FurnitureLibrary from '@components/furniture/FurnitureLibrary'
 import LayoutSuggestionPanel from '@components/layout/LayoutSuggestionPanel'
 import VersionManager from '@components/layout/VersionManager'
+import WallDetectionPanel from '@components/shared/WallDetectionPanel'
 import { useFloorPlanStore } from '@store/useFloorPlanStore'
 import { FurnitureCategory } from '@domain/floorplan/types'
 
@@ -18,6 +19,8 @@ function Sidebar() {
         <div className="text-sm text-gray-700">{document.project.name}</div>
         <div className="text-xs text-gray-400">{document.walls.length} walls, {document.furniture.length} furniture</div>
       </div>
+      
+      <WallDetectionPanel />
       
       <FurnitureLibrary onSelect={handleFurnitureSelect} />
       
