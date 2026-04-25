@@ -111,9 +111,34 @@ export interface FloorPlanState {
 
   // Custom furniture assets
   createCustomFurniture: (name: string, category: FurnitureCategory, width: number, height: number, elevation: number) => void
+  renameCustomFurniture: (assetId: string, newName: string) => void
   deleteCustomFurniture: (assetId: string) => void
+  saveFurnitureAsAsset: (furnitureId: string, name: string) => void
   setPendingCustomFurniture: (assetId: string | null) => void
   addCustomFurnitureAtPosition: (position: Point2D) => void
+}
+
+// Custom furniture assets persistence
+const CUSTOM_ASSETS_STORAGE_KEY = 'amazing-home-custom-assets'
+
+function loadCustomAssetsFromStorage(): CustomFurnitureAsset[] {
+  try {
+    const stored = localStorage.getItem(CUSTOM_ASSETS_STORAGE_KEY)
+    if (stored) {
+      return JSON.parse(stored)
+    }
+  } catch {
+    // ignore
+  }
+  return []
+}
+
+function saveCustomAssetsToStorage(assets: CustomFurnitureAsset[]) {
+  try {
+    localStorage.setItem(CUSTOM_ASSETS_STORAGE_KEY, JSON.stringify(assets))
+  } catch {
+    // ignore
+  }
 }
 
 export const useFloorPlanStore = create<FloorPlanState>((set, get) => ({
@@ -128,7 +153,7 @@ export const useFloorPlanStore = create<FloorPlanState>((set, get) => ({
   history: { past: [], future: [] },
   versions: [],
   activeVersionId: null,
-  customFurnitureAssets: [],
+  customFurnitureAssets: loadCustomAssetsFromStorage(),
   pendingCustomFurnitureId: null,
 
   createNewProject: (projectId, projectName) => {
@@ -454,17 +479,50 @@ export const useFloorPlanStore = create<FloorPlanState>((set, get) => ({
       customElevation: elevation,
       createdAt: new Date().toISOString(),
     }
+    const newAssets = [...customFurnitureAssets, newAsset]
+    saveCustomAssetsToStorage(newAssets)
     set({
-      customFurnitureAssets: [...customFurnitureAssets, newAsset],
+      customFurnitureAssets: newAssets,
     })
+  },
+
+  renameCustomFurniture: (assetId, newName) => {
+    const { customFurnitureAssets } = get()
+    const newAssets = customFurnitureAssets.map(a => 
+      a.id === assetId ? { ...a, name: newName } : a
+    )
+    saveCustomAssetsToStorage(newAssets)
+    set({ customFurnitureAssets: newAssets })
   },
 
   deleteCustomFurniture: (assetId) => {
     const { customFurnitureAssets, pendingCustomFurnitureId } = get()
+    const newAssets = customFurnitureAssets.filter(a => a.id !== assetId)
+    saveCustomAssetsToStorage(newAssets)
     set({
-      customFurnitureAssets: customFurnitureAssets.filter(a => a.id !== assetId),
+      customFurnitureAssets: newAssets,
       pendingCustomFurnitureId: pendingCustomFurnitureId === assetId ? null : pendingCustomFurnitureId,
     })
+  },
+
+  saveFurnitureAsAsset: (furnitureId, name) => {
+    const { document, customFurnitureAssets } = get()
+    const furniture = document.furniture.find(f => f.id === furnitureId)
+    if (!furniture) return
+    
+    const assetId = `custom-${Date.now()}`
+    const newAsset: CustomFurnitureAsset = {
+      id: assetId,
+      name,
+      category: furniture.category,
+      customWidth: furniture.width,
+      customHeight: furniture.height,
+      customElevation: furniture.elevation,
+      createdAt: new Date().toISOString(),
+    }
+    const newAssets = [...customFurnitureAssets, newAsset]
+    saveCustomAssetsToStorage(newAssets)
+    set({ customFurnitureAssets: newAssets })
   },
 
   setPendingCustomFurniture: (assetId) => {
