@@ -268,6 +268,17 @@ netlify deploy
 
 ---
 
+## Case Study
+
+See [docs/case-study.md](docs/case-study.md) for:
+- Problem statement and product direction
+- Architecture and technical decisions
+- Feature breakdown and roadmap
+- Async AI development workflow
+- Limitations and positioning statement
+
+---
+
 ## License
 
 MIT
