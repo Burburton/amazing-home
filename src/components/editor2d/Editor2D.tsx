@@ -8,6 +8,7 @@ import EditorModeSelector from './EditorModeSelector'
 import UploadOverlay from './UploadOverlay'
 import ErrorMessage from './ErrorMessage'
 import { Point2D } from '@domain/floorplan/types'
+import { FURNITURE_CATALOG } from '@domain/floorplan/furniture-catalog'
 
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/jpg']
 const MAX_FILE_SIZE = 10 * 1024 * 1024
@@ -29,9 +30,10 @@ function Editor2D() {
   const [containerSize, setContainerSize] = useState({ width: 800, height: 600 })
   const [drawingStart, setDrawingStart] = useState<Point2D | null>(null)
   const [isImageLoading, setIsImageLoading] = useState(false)
+  const [mousePosition, setMousePosition] = useState<Point2D | null>(null)
   
   const { 
-    document, workspace, selectedWallId, selectedFurnitureId, editorMode, pendingFurnitureCategory, pendingCustomFurnitureId, error,
+    document, workspace, selectedWallId, selectedFurnitureId, editorMode, pendingFurnitureCategory, pendingCustomFurnitureId, customFurnitureAssets, error,
     setSourceImage, setWorkspace, setError, fitToScreen, resetView, clearImage,
     addWall, updateWall, selectWall, setEditorMode, selectFurniture, updateFurniture, addFurnitureAtPosition, addCustomFurnitureAtPosition
   } = useFloorPlanStore()
@@ -42,6 +44,21 @@ function Editor2D() {
   
   const [image, imageStatus] = useImage(sourceImage?.objectUrl || '')
   const stageRef = useRef<any>(null)
+
+  const pendingCustomAsset = customFurnitureAssets.find(a => a.id === pendingCustomFurnitureId)
+  
+  const getPreviewDimensions = () => {
+    if (pendingCustomAsset) {
+      return { width: pendingCustomAsset.customWidth, height: pendingCustomAsset.customHeight }
+    }
+    if (pendingFurnitureCategory) {
+      const catalog = FURNITURE_CATALOG.find(e => e.category === pendingFurnitureCategory)
+      return { width: catalog?.defaultWidth ?? 100, height: catalog?.defaultHeight ?? 100 }
+    }
+    return null
+  }
+  
+  const previewDimensions = getPreviewDimensions()
 
   useEffect(() => {
     if (!containerRef.current) return
@@ -128,6 +145,15 @@ function Editor2D() {
       addCustomFurnitureAtPosition(point)
     }
   }, [editorMode, sourceImage, drawingStart, addWall, getCanvasPoint, pendingFurnitureCategory, addFurnitureAtPosition, pendingCustomFurnitureId, addCustomFurnitureAtPosition])
+
+  const handleMouseMove = useCallback(() => {
+    if (editorMode === 'placeFurniture') {
+      const point = getCanvasPoint()
+      setMousePosition(point)
+    } else {
+      setMousePosition(null)
+    }
+  }, [editorMode, getCanvasPoint])
 
   const handleWheel = useCallback((e: any) => {
     e.evt.preventDefault()
@@ -218,6 +244,7 @@ function Editor2D() {
             onWheel={handleWheel}
             onDragEnd={handleDragEnd}
             onClick={handleCanvasClick}
+            onMouseMove={handleMouseMove}
           >
             <Layer>
               {image && (
@@ -260,6 +287,19 @@ function Editor2D() {
               
               {drawingStart && (
                 <Circle x={drawingStart.x} y={drawingStart.y} radius={HANDLE_RADIUS} fill="#0ea5e9" />
+              )}
+              
+              {mousePosition && previewDimensions && editorMode === 'placeFurniture' && (
+                <Rect
+                  x={mousePosition.x - previewDimensions.width / 2}
+                  y={mousePosition.y - previewDimensions.height / 2}
+                  width={previewDimensions.width}
+                  height={previewDimensions.height}
+                  fill="#10b98140"
+                  stroke="#10b981"
+                  strokeWidth={2}
+                  cornerRadius={4}
+                />
               )}
               
               {selectedWall && (
