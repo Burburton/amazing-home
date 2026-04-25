@@ -10,6 +10,7 @@ import {
   FurnitureCategory,
   LayoutVersion,
   LayoutVersionSourceType,
+  CustomFurnitureAsset,
 } from '@domain/floorplan/types'
 import {
   createEmptyDocument,
@@ -50,6 +51,8 @@ export interface FloorPlanState {
   history: HistoryState
   versions: LayoutVersion[]
   activeVersionId: string | null
+  customFurnitureAssets: CustomFurnitureAsset[]
+  pendingCustomFurnitureId: string | null
 
   // Document-level actions
   createNewProject: (projectId: string, projectName: string) => void
@@ -105,6 +108,12 @@ export interface FloorPlanState {
   switchVersion: (versionId: string) => void
   deleteVersion: (versionId: string) => void
   getActiveVersion: () => LayoutVersion | null
+
+  // Custom furniture assets
+  createCustomFurniture: (name: string, category: FurnitureCategory, width: number, height: number, elevation: number) => void
+  deleteCustomFurniture: (assetId: string) => void
+  setPendingCustomFurniture: (assetId: string | null) => void
+  addCustomFurnitureAtPosition: (position: Point2D) => void
 }
 
 export const useFloorPlanStore = create<FloorPlanState>((set, get) => ({
@@ -119,6 +128,8 @@ export const useFloorPlanStore = create<FloorPlanState>((set, get) => ({
   history: { past: [], future: [] },
   versions: [],
   activeVersionId: null,
+  customFurnitureAssets: [],
+  pendingCustomFurnitureId: null,
 
   createNewProject: (projectId, projectName) => {
     set({
@@ -132,6 +143,8 @@ export const useFloorPlanStore = create<FloorPlanState>((set, get) => ({
       history: { past: [], future: [] },
       versions: [],
       activeVersionId: null,
+      customFurnitureAssets: [],
+      pendingCustomFurnitureId: null,
     })
   },
 
@@ -427,5 +440,75 @@ export const useFloorPlanStore = create<FloorPlanState>((set, get) => ({
     const { versions, activeVersionId } = get()
     if (!activeVersionId) return null
     return versions.find(v => v.id === activeVersionId) || null
+  },
+
+  createCustomFurniture: (name, category, width, height, elevation) => {
+    const { customFurnitureAssets } = get()
+    const assetId = `custom-${Date.now()}`
+    const newAsset: CustomFurnitureAsset = {
+      id: assetId,
+      name,
+      category,
+      customWidth: width,
+      customHeight: height,
+      customElevation: elevation,
+      createdAt: new Date().toISOString(),
+    }
+    set({
+      customFurnitureAssets: [...customFurnitureAssets, newAsset],
+    })
+  },
+
+  deleteCustomFurniture: (assetId) => {
+    const { customFurnitureAssets, pendingCustomFurnitureId } = get()
+    set({
+      customFurnitureAssets: customFurnitureAssets.filter(a => a.id !== assetId),
+      pendingCustomFurnitureId: pendingCustomFurnitureId === assetId ? null : pendingCustomFurnitureId,
+    })
+  },
+
+  setPendingCustomFurniture: (assetId) => {
+    set({
+      pendingCustomFurnitureId: assetId,
+      editorMode: assetId ? 'placeFurniture' : 'select',
+      pendingFurnitureCategory: null,
+      selectedWallId: null,
+      selectedFurnitureId: null,
+    })
+  },
+
+  addCustomFurnitureAtPosition: (position) => {
+    const { document, pendingCustomFurnitureId, customFurnitureAssets, history } = get()
+    if (!pendingCustomFurnitureId) return
+    
+    const asset = customFurnitureAssets.find(a => a.id === pendingCustomFurnitureId)
+    if (!asset) return
+    
+    const newPast = [...history.past, cloneDocument(document)].slice(-MAX_HISTORY)
+    
+    const newFurnitureItem: FurnitureItem = {
+      id: `furniture-${Date.now()}`,
+      category: asset.category,
+      name: asset.name,
+      position,
+      rotation: 0,
+      width: asset.customWidth,
+      height: asset.customHeight,
+      elevation: asset.customElevation,
+    }
+    
+    set({
+      document: {
+        ...document,
+        furniture: [...document.furniture, newFurnitureItem],
+        project: {
+          ...document.project,
+          updatedAt: new Date().toISOString(),
+        },
+      },
+      history: { past: newPast, future: [] },
+      pendingCustomFurnitureId: null,
+      editorMode: 'select',
+    })
   },
 }))

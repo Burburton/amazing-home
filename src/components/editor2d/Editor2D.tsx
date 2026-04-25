@@ -31,9 +31,9 @@ function Editor2D() {
   const [isImageLoading, setIsImageLoading] = useState(false)
   
   const { 
-    document, workspace, selectedWallId, selectedFurnitureId, editorMode, pendingFurnitureCategory, error,
+    document, workspace, selectedWallId, selectedFurnitureId, editorMode, pendingFurnitureCategory, pendingCustomFurnitureId, error,
     setSourceImage, setWorkspace, setError, fitToScreen, resetView, clearImage,
-    addWall, updateWall, selectWall, setEditorMode, selectFurniture, updateFurniture, addFurnitureAtPosition
+    addWall, updateWall, selectWall, setEditorMode, selectFurniture, updateFurniture, addFurnitureAtPosition, addCustomFurnitureAtPosition
   } = useFloorPlanStore()
   
   const sourceImage = document.sourceImage
@@ -124,8 +124,10 @@ function Editor2D() {
       }
     } else if (editorMode === 'placeFurniture' && pendingFurnitureCategory) {
       addFurnitureAtPosition(point)
+    } else if (editorMode === 'placeFurniture' && pendingCustomFurnitureId) {
+      addCustomFurnitureAtPosition(point)
     }
-  }, [editorMode, sourceImage, drawingStart, addWall, getCanvasPoint, pendingFurnitureCategory, addFurnitureAtPosition])
+  }, [editorMode, sourceImage, drawingStart, addWall, getCanvasPoint, pendingFurnitureCategory, addFurnitureAtPosition, pendingCustomFurnitureId, addCustomFurnitureAtPosition])
 
   const handleWheel = useCallback((e: any) => {
     e.evt.preventDefault()

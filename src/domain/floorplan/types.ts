@@ -130,3 +130,13 @@ export interface LayoutVersion {
   createdAt: string
   updatedAt: string
 }
+
+export interface CustomFurnitureAsset {
+  id: string
+  name: string
+  category: FurnitureCategory
+  customWidth: number
+  customHeight: number
+  customElevation: number
+  createdAt: string
+}
