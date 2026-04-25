@@ -1,7 +1,6 @@
 import { FloorPlanDocument } from '../types'
 
-const DEMO_FLOORPLAN_DATA_URI = 'data:image/svg+xml;base64,' + Buffer.from(`
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="400" height="300">
+const DEMO_FLOORPLAN_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" width="400" height="300">
   <rect x="50" y="50" width="300" height="200" fill="#f5f5f5" stroke="#374151" stroke-width="2"/>
   <line x1="50" y1="50" x2="350" y2="50" stroke="#374151" stroke-width="8"/>
   <line x1="350" y1="50" x2="350" y2="250" stroke="#374151" stroke-width="8"/>
@@ -14,8 +13,9 @@ const DEMO_FLOORPLAN_DATA_URI = 'data:image/svg+xml;base64,' + Buffer.from(`
   <line x1="200" y1="50" x2="200" y2="180" stroke="#374151" stroke-width="6"/>
   <text x="120" y="140" font-family="Arial" font-size="14" fill="#6b7280">Living Room</text>
   <text x="260" y="140" font-family="Arial" font-size="14" fill="#6b7280">Bedroom</text>
-</svg>
-`).toString('base64')
+</svg>`
+
+const DEMO_FLOORPLAN_DATA_URI = 'data:image/svg+xml;base64,' + (typeof window !== 'undefined' ? btoa(DEMO_FLOORPLAN_SVG) : Buffer.from(DEMO_FLOORPLAN_SVG).toString('base64'))
 
 export const sampleFloorPlanDocument: FloorPlanDocument = {
   version: '1.0.0',
