@@ -1,4 +1,5 @@
 import FurnitureLibrary from '@components/furniture/FurnitureLibrary'
+import LayoutSuggestionPanel from '@components/layout/LayoutSuggestionPanel'
 import { useFloorPlanStore } from '@store/useFloorPlanStore'
 import { FurnitureCategory } from '@domain/floorplan/types'
 
@@ -18,6 +19,8 @@ function Sidebar() {
       </div>
       
       <FurnitureLibrary onSelect={handleFurnitureSelect} />
+      
+      <LayoutSuggestionPanel />
       
       <div className="panel-header">Tools</div>
       <div className="panel-content space-y-2">
