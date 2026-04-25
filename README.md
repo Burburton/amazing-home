@@ -1,22 +1,30 @@
 # Amazing Home
 
-**Browser-based Home Layout Preview Tool**
+Browser-based home layout visualization tool. Upload a floor plan, trace walls, place furniture, and see a 3D preview.
 
-🚀 **Live Demo**: https://burburton.github.io/amazing-home/
-
-A lightweight web application for visualizing home layouts: upload floor plans, trace walls manually, generate 3D shells, place furniture, and export previews.
+**Live Demo**: https://burburton.github.io/amazing-home/
 
 ---
 
-## Demo (5 minutes)
+## Features
+
+- 📐 **Floor Plan Upload**: Upload any floor plan image as reference
+- 🏠 **Wall Tracing**: Draw walls manually or use experimental auto-detection
+- 🪑 **Furniture Library**: 7 categories + custom furniture assets
+- 🎨 **3D Preview**: See your layout as a 3D model
+- 🤖 **Layout Suggestions**: AI-generated furniture arrangements
+- 💾 **Export/Import**: Save layouts as JSON files
+- 🔄 **Version Comparison**: Save and switch between layout versions
+- 📋 **Product Reference Cards**: Attach product images and URLs to furniture
+
+---
+
+## Quick Start
 
 ```bash
-# Clone and setup
-git clone https://github.com/user/amazing-home.git
+git clone https://github.com/Burburton/amazing-home.git
 cd amazing-home
 npm install
-
-# Start development server
 npm run dev
 ```
 

@@ -101,22 +101,22 @@ User action → Zustand store → FloorPlanDocument update →
 | 011 | Layout suggestions (rule-based) | ✅ |
 | 012 | Layout version saving/switching | ✅ |
 
-### Phase 3 — Personalization (Features 014-015)
+### Phase 3 — Personalization (Features 014-017)
 
 | Feature | Description | Status |
 |---------|-------------|--------|
 | 014 | Custom furniture creation (dimensions) | ✅ |
 | 015 | Furniture dimension editing | ✅ |
+| 016 | Product image reference cards | ✅ |
+| 017 | Furniture asset library with persistence | ✅ |
 
-### Phase 4 — Future (Planned)
+### Phase 4 — Advanced Features (Features 018, 021, 022)
 
 | Feature | Description | Status |
 |---------|-------------|--------|
-| 016 | Product image reference cards | 🔜 |
-| 017 | Furniture asset library | 🔜 |
-| 018 | Wall detection spike | 🔜 |
-| 021 | Case study page | ✅ (this document) |
-| 022 | Demo video/GIF | 🔜 |
+| 018 | Wall detection spike (experimental) | ✅ |
+| 021 | Case study page | ✅ |
+| 022 | Demo video/GIF walkthrough | ✅ |
 
 ---
 
