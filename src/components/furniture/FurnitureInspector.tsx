@@ -86,6 +86,31 @@ function FurnitureInspector({ furniture, onUpdate, onDelete }: FurnitureInspecto
         />
       </div>
       
+      <div>
+        <label className="block text-xs text-gray-500 mb-1">Elevation (cm)</label>
+        <input
+          type="number"
+          value={furniture.elevation}
+          onChange={(e) => onUpdate({ elevation: parseInt(e.target.value) || 45 })}
+          min={0}
+          max={200}
+          className="w-full px-2 py-1 text-sm border border-gray-200 rounded"
+        />
+      </div>
+      
+      {catalogEntry && (
+        <button
+          onClick={() => onUpdate({
+            width: catalogEntry.defaultWidth,
+            height: catalogEntry.defaultHeight,
+            elevation: catalogEntry.defaultElevation,
+          })}
+          className="w-full px-3 py-2 text-sm bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors"
+        >
+          Reset to Default Size
+        </button>
+      )}
+      
       <button
         onClick={onDelete}
         className="w-full px-3 py-2 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors"
