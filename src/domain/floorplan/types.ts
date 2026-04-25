@@ -118,3 +118,15 @@ export const DEFAULT_SETTINGS: ProjectSettings = {
   defaultWallThickness: 10,
   unit: 'px',
 }
+
+export type LayoutVersionSourceType = 'manual' | 'suggestion' | 'demo' | 'imported'
+
+export interface LayoutVersion {
+  id: string
+  name: string
+  sourceType: LayoutVersionSourceType
+  summary?: string
+  document: FloorPlanDocument
+  createdAt: string
+  updatedAt: string
+}

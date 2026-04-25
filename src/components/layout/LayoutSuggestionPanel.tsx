@@ -18,7 +18,7 @@ const PRIORITIES: LayoutPriority[] = [
 ]
 
 function LayoutSuggestionPanel() {
-  const { document } = useFloorPlanStore()
+  const { document, saveVersion } = useFloorPlanStore()
   const [selectedPriority, setSelectedPriority] = useState<LayoutPriority | null>(null)
   const [suggestions, setSuggestions] = useState<LayoutSuggestion[]>([])
   const [expandedSuggestion, setExpandedSuggestion] = useState<string | null>(null)
@@ -45,6 +45,14 @@ function LayoutSuggestionPanel() {
   
   const handleToggleExpand = (suggestionId: string) => {
     setExpandedSuggestion(expandedSuggestion === suggestionId ? null : suggestionId)
+  }
+  
+  const handleSaveSuggestionAsVersion = (suggestion: LayoutSuggestion) => {
+    saveVersion(
+      suggestion.name,
+      'suggestion',
+      `${suggestion.summary} (${getPriorityLabel(suggestion.priority)} priority)`
+    )
   }
   
   return (
@@ -128,9 +136,9 @@ function LayoutSuggestionPanel() {
                     
                     <div className="flex justify-between mt-2">
                       <button
-                        className="px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded hover:bg-gray-200"
-                        disabled
-                        title="Save as layout version (coming in Feature 012)"
+                        onClick={() => handleSaveSuggestionAsVersion(suggestion)}
+                        className="px-2 py-1 text-xs bg-primary-100 text-primary-700 rounded hover:bg-primary-200"
+                        title="Save current layout as a named version"
                       >
                         Save as Version
                       </button>

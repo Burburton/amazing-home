@@ -8,6 +8,8 @@ import {
   EditorMode,
   FurnitureItem,
   FurnitureCategory,
+  LayoutVersion,
+  LayoutVersionSourceType,
 } from '@domain/floorplan/types'
 import {
   createEmptyDocument,
@@ -46,6 +48,8 @@ export interface FloorPlanState {
   viewMode: ViewMode
   error: string | null
   history: HistoryState
+  versions: LayoutVersion[]
+  activeVersionId: string | null
 
   // Document-level actions
   createNewProject: (projectId: string, projectName: string) => void
@@ -94,6 +98,13 @@ export interface FloorPlanState {
 
   // Error handling
   setError: (error: string | null) => void
+
+  // Layout versions
+  saveVersion: (name: string, sourceType: LayoutVersionSourceType, summary?: string) => void
+  duplicateVersion: (versionId: string) => void
+  switchVersion: (versionId: string) => void
+  deleteVersion: (versionId: string) => void
+  getActiveVersion: () => LayoutVersion | null
 }
 
 export const useFloorPlanStore = create<FloorPlanState>((set, get) => ({
@@ -106,6 +117,8 @@ export const useFloorPlanStore = create<FloorPlanState>((set, get) => ({
   viewMode: '2d',
   error: null,
   history: { past: [], future: [] },
+  versions: [],
+  activeVersionId: null,
 
   createNewProject: (projectId, projectName) => {
     set({
@@ -117,6 +130,8 @@ export const useFloorPlanStore = create<FloorPlanState>((set, get) => ({
       viewMode: '2d',
       error: null,
       history: { past: [], future: [] },
+      versions: [],
+      activeVersionId: null,
     })
   },
 
@@ -340,4 +355,77 @@ export const useFloorPlanStore = create<FloorPlanState>((set, get) => ({
   canRedo: () => get().history.future.length > 0,
 
   setError: (error) => set({ error }),
+
+  saveVersion: (name, sourceType, summary) => {
+    const { document, versions } = get()
+    const now = new Date().toISOString()
+    const versionId = `version-${Date.now()}`
+    
+    const newVersion: LayoutVersion = {
+      id: versionId,
+      name,
+      sourceType,
+      summary,
+      document: cloneDocument(document),
+      createdAt: now,
+      updatedAt: now,
+    }
+    
+    set({
+      versions: [...versions, newVersion],
+      activeVersionId: versionId,
+    })
+  },
+
+  duplicateVersion: (versionId) => {
+    const { versions } = get()
+    const sourceVersion = versions.find(v => v.id === versionId)
+    if (!sourceVersion) return
+    
+    const now = new Date().toISOString()
+    const newVersionId = `version-${Date.now()}`
+    
+    const newVersion: LayoutVersion = {
+      id: newVersionId,
+      name: `${sourceVersion.name} (copy)`,
+      sourceType: 'manual',
+      document: cloneDocument(sourceVersion.document),
+      createdAt: now,
+      updatedAt: now,
+    }
+    
+    set({
+      versions: [...versions, newVersion],
+    })
+  },
+
+  switchVersion: (versionId) => {
+    const { versions } = get()
+    const version = versions.find(v => v.id === versionId)
+    if (!version) return
+    
+    set({
+      document: cloneDocument(version.document),
+      activeVersionId: versionId,
+      selectedWallId: null,
+      selectedFurnitureId: null,
+      history: { past: [], future: [] },
+    })
+  },
+
+  deleteVersion: (versionId) => {
+    const { versions, activeVersionId } = get()
+    const newVersions = versions.filter(v => v.id !== versionId)
+    
+    set({
+      versions: newVersions,
+      activeVersionId: activeVersionId === versionId ? null : activeVersionId,
+    })
+  },
+
+  getActiveVersion: () => {
+    const { versions, activeVersionId } = get()
+    if (!activeVersionId) return null
+    return versions.find(v => v.id === activeVersionId) || null
+  },
 }))

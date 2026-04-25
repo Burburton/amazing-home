@@ -1,5 +1,6 @@
 import FurnitureLibrary from '@components/furniture/FurnitureLibrary'
 import LayoutSuggestionPanel from '@components/layout/LayoutSuggestionPanel'
+import VersionManager from '@components/layout/VersionManager'
 import { useFloorPlanStore } from '@store/useFloorPlanStore'
 import { FurnitureCategory } from '@domain/floorplan/types'
 
@@ -19,6 +20,8 @@ function Sidebar() {
       </div>
       
       <FurnitureLibrary onSelect={handleFurnitureSelect} />
+      
+      <VersionManager />
       
       <LayoutSuggestionPanel />
       
