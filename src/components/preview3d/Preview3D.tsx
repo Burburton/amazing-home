@@ -42,11 +42,10 @@ function Scene() {
       <PerspectiveCamera makeDefault position={[boundingBox.centerX + 300, 400, boundingBox.centerY + 300]} fov={50} />
       <OrbitControls target={[boundingBox.centerX, 0, boundingBox.centerY]} />
       
-      <ambientLight intensity={0.5} />
+      <ambientLight intensity={0.7} />
       <directionalLight
         position={[200, 400, 200]}
-        intensity={1}
-        castShadow
+        intensity={1.2}
       />
       
       <Plane
@@ -105,7 +104,7 @@ function Preview3D() {
         3D Preview - {walls.length} walls, {furniture.length} furniture
       </div>
       
-      <Canvas shadows>
+      <Canvas>
         <Scene />
       </Canvas>
     </div>

@@ -8,14 +8,6 @@ export const sampleFloorPlanDocument: FloorPlanDocument = {
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-04-25T00:00:00.000Z',
   },
-  sourceImage: {
-    id: 'sample-image-001',
-    name: 'floorplan-sample.png',
-    objectUrl: 'blob:sample',
-    width: 800,
-    height: 600,
-    uploadedAt: '2026-01-01T00:00:00.000Z',
-  },
   walls: [
     {
       id: 'wall-001',
