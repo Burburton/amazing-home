@@ -30,7 +30,10 @@ function InspectorPanel() {
       <div className="panel-header">Furniture List</div>
       <div className="panel-content">
         {furniture.length === 0 ? (
-          <div className="text-sm text-gray-400">No furniture placed</div>
+          <div className="text-sm text-gray-400">
+            <p>No furniture placed</p>
+            <p className="text-xs mt-1">Click a furniture type in the sidebar to add</p>
+          </div>
         ) : (
           <div className="space-y-1">
             {furniture.map(item => {
@@ -65,7 +68,10 @@ function InspectorPanel() {
       <div className="panel-header">Walls List</div>
       <div className="panel-content">
         {walls.length === 0 ? (
-          <div className="text-sm text-gray-400">No walls drawn</div>
+          <div className="text-sm text-gray-400">
+            <p>No walls drawn</p>
+            <p className="text-xs mt-1">Switch to "Draw Wall" mode and click to trace</p>
+          </div>
         ) : (
           <div className="space-y-1">
             {walls.map(wall => (
@@ -120,6 +126,12 @@ function InspectorPanel() {
             <option value="m">Meters</option>
           </select>
         </div>
+      </div>
+      
+      <div className="mt-4 p-3 bg-gray-100 rounded">
+        <p className="text-xs text-gray-500">
+          ⚠️ This is a design visualization tool. Not for construction or engineering validation.
+        </p>
       </div>
     </aside>
   )

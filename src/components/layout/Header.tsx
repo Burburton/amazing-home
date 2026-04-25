@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useFloorPlanStore } from '@store/useFloorPlanStore'
+import { sampleFloorPlanDocument } from '@domain/floorplan/fixtures/sample-document'
 
 const STORAGE_KEY = 'amazing-home-project'
 
@@ -46,6 +47,11 @@ function Header() {
       loadDocument({ ...document, project: { ...document.project, name: tempName.trim() } })
     }
     setEditingName(false)
+  }
+  
+  const handleLoadDemo = () => {
+    loadDocument(sampleFloorPlanDocument)
+    setError(null)
   }
   
   const handleLoadFromStorage = () => {
@@ -152,6 +158,14 @@ function Header() {
           className="px-3 py-1.5 text-xs bg-primary-500 hover:bg-primary-400 rounded transition-colors"
         >
           New
+        </button>
+        
+        <button
+          onClick={handleLoadDemo}
+          className="px-3 py-1.5 text-xs bg-green-600 hover:bg-green-500 rounded transition-colors"
+          title="Load demo project with sample walls and furniture"
+        >
+          Demo
         </button>
         
         <button

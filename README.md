@@ -24,13 +24,14 @@ Open http://localhost:5173
 
 ### Demo Flow
 
-1. **Upload Floor Plan** - Click Upload or drag image to canvas
-2. **Trace Walls** - Switch to Draw Wall mode, click start → click end
-3. **View 3D** - Click 3D Preview toggle to see walls in 3D
-4. **Add Furniture** - Click furniture type in sidebar (Sofa, Bed, Chair, etc.)
-5. **Edit Furniture** - Select furniture, drag to move, use Inspector to resize/rotate
-6. **Save Project** - Click Save button (stores in localStorage)
-7. **Export JSON** - Click Export to download project file
+1. **Load Demo** - Click "Demo" button to see a sample project
+2. **Upload Floor Plan** - Or upload your own JPG/PNG image
+3. **Trace Walls** - Switch to Draw Wall mode, click start → click end
+4. **View 3D** - Click 3D Preview toggle to see walls in 3D
+5. **Add Furniture** - Click furniture type, then click canvas to place
+6. **Edit Furniture** - Select furniture, drag to move, use Inspector to resize/rotate
+7. **Save Project** - Click Save button (stores in localStorage)
+8. **Export JSON** - Click Export to download project file
 
 **Full demo script**: See [docs/product/v1-demo-script.md](docs/product/v1-demo-script.md)
 
@@ -63,7 +64,7 @@ npm run preview
 | `npm run preview` | Preview production build locally |
 | `npm run typecheck` | Run TypeScript type checking |
 | `npm run lint` | Run ESLint |
-| `npm run test` | Run tests once (70 tests) |
+| `npm run test` | Run tests once (86 tests) |
 | `npm run test:watch` | Run tests in watch mode |
 
 ---
@@ -110,7 +111,7 @@ amazing-home/
 
 ## Features
 
-### Implemented (V1 MVP)
+### Implemented (V1 MVP + Feature 010)
 
 | Feature | Status |
 |---------|--------|
@@ -120,34 +121,73 @@ amazing-home/
 | Wall selection/editing | ✅ Endpoint handles, thickness |
 | 3D wall preview | ✅ Box meshes, orbit controls |
 | Furniture catalog | ✅ 7 types (sofa, bed, chair, etc.) |
-| Furniture placement | ✅ Add, move, rotate, resize |
+| Furniture placement | ✅ Click-to-place mode |
 | 3D furniture preview | ✅ Colored boxes by category |
 | Project persistence | ✅ localStorage save/load |
 | JSON export/import | ✅ FloorPlanDocument serialization |
 | Project name editing | ✅ Inline edit in header |
+| Undo/redo | ✅ Keyboard shortcuts (Ctrl+Z/Y) |
+| Loading states | ✅ Spinner during image upload |
+| Built-in demo project | ✅ "Demo" button loads sample |
+| First-time user guide | ✅ Welcome modal on first visit |
+| Empty state hints | ✅ Action guidance messages |
+| Product disclaimer | ✅ Not for construction/engineering |
 
-### Planned (V1.5+)
+---
 
-- Room detection from closed wall loops
-- Undo/redo functionality
-- Click-to-place furniture mode
-- Grid snapping overlay
-- AI layout suggestions
-- Parametric furniture generation
+## Roadmap
+
+### Phase 2 — Showcase & Usability (In Progress)
+
+| Feature | Description | Status |
+|---------|-------------|--------|
+| 010 Public Demo Hardening | Built-in demo, user guide, empty states | ✅ Complete |
+| 011 AI Layout Suggestions | Rule-based layout recommendations | 🔜 Planned |
+| 012 Layout Version Comparison | Save/compare design versions | 🔜 Planned |
+| 013 Layout Recommendation UX | Apply suggestions as versions | 🔜 Planned |
+
+### Phase 3 — Smart Layout
+
+| Feature | Description | Status |
+|---------|-------------|--------|
+| 014 Parametric Furniture | Custom dimensions for furniture | 🔜 Planned |
+| 015 User-defined Dimensions | Furniture property inspector | 🔜 Planned |
+| 016 Product Image Reference | Attach images to furniture | 🔜 Planned |
+| 017 Furniture Asset Library | Reusable personal library | 🔜 Planned |
+
+### Phase 4 — Floor Plan Recognition
+
+| Feature | Description | Status |
+|---------|-------------|--------|
+| 018 Wall Detection Spike | Experimental line detection | 🔜 Planned |
+| 019 Wall Detection Review | Accept/reject candidates | 🔜 Planned |
+| 020 Recognition Correction UX | Fix detection errors | 🔜 Planned |
+
+### Phase 5 — Portfolio Packaging
+
+| Feature | Description | Status |
+|---------|-------------|--------|
+| 021 Case Study Page | Product/engineering writeup | 🔜 Planned |
+| 022 Demo Video/GIF | Visual demo for sharing | 🔜 Planned |
+| 023 Architecture Writeup | Technical documentation | 🔜 Planned |
+| 024 Resume Packaging | Portfolio-ready descriptions | 🔜 Planned |
+
+See full roadmap: [docs/infra/ai_home_layout_next_stage_roadmap.md](docs/infra/ai_home_layout_next_stage_roadmap.md)
 
 ---
 
 ## Known Issues
 
-| Issue | Severity | Notes |
-|-------|----------|-------|
-| Bundle size > 1MB | Major | Three.js heavy; code-split planned |
-| Furniture spawns at center | Minor | Click placement mode planned |
-| No undo/redo | Major | History stack planned for V1.5 |
-| No grid snapping | Minor | Optional overlay planned |
-| Konva type workarounds | Low | Third-party library limitation |
+| Issue | Severity | Status |
+|-------|----------|--------|
+| Bundle size > 1MB | Major | Accepted (Three.js; gzip ~384KB) |
+| No grid snapping | Minor | Planned V1.5 |
+| Konva type workarounds | Low | Upstream issue |
+| No room detection | Minor | Planned V2 |
 
-See full report: [docs/dogfooding/v1-dogfooding-report.md](docs/dogfooding/v1-dogfooding-report.md)
+**Fixed issues**: Undo/redo ✅, Click-to-place furniture ✅, Loading states ✅
+
+See full report: [docs/product/known-issues.md](docs/product/known-issues.md)
 
 ---
 
@@ -202,11 +242,13 @@ npm run test -- --coverage
 ```
 
 **Test Categories**:
-- Document model: 29 tests
+- Document model: 45 tests
 - Geometry utilities: 11 tests
 - Furniture operations: 12 tests
 - Serialization/persistence: 16 tests
 - Scaffold: 2 tests
+
+**Total**: 86 tests
 
 ---
 
