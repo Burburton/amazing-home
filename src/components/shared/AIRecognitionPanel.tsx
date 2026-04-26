@@ -9,6 +9,7 @@ import {
   DetectedIcon,
 } from '@services/recognitionApi'
 import { localRecognizer, LocalRecognitionResult } from '@services/localRecognizer'
+import { ModelLoadProgress } from '@domain/floorplan/tfjs-recognizer'
 
 type DetectionMode = 'api' | 'local'
 
@@ -19,6 +20,8 @@ function AIRecognitionPanel() {
   const [error, setError] = useState<string | null>(null)
   const [apiStatus, setApiStatus] = useState<'unknown' | 'ok' | 'error'>('unknown')
   const [tfjsLoaded, setTfjsLoaded] = useState(false)
+  const [isLoadingModel, setIsLoadingModel] = useState(false)
+  const [loadProgress, setLoadProgress] = useState<ModelLoadProgress | null>(null)
   
   const [detectWalls, setDetectWalls] = useState(true)
   const [detectRooms, setDetectRooms] = useState(true)
@@ -33,11 +36,20 @@ function AIRecognitionPanel() {
   }
   
   const loadTfjsModel = async () => {
+    if (tfjsLoaded || isLoadingModel) return
+    
+    setIsLoadingModel(true)
+    setError(null)
+    
     try {
-      await localRecognizer.loadModel()
+      await localRecognizer.loadModel((progress) => {
+        setLoadProgress(progress)
+      })
       setTfjsLoaded(true)
     } catch {
       setError('Failed to load TF.js model')
+    } finally {
+      setIsLoadingModel(false)
     }
   }
   
@@ -52,6 +64,11 @@ function AIRecognitionPanel() {
       if (mode === 'local') {
         if (!tfjsLoaded) {
           await loadTfjsModel()
+          if (!tfjsLoaded) {
+            setError('Model failed to load')
+            setIsRecognizing(false)
+            return
+          }
         }
         
         const img = new window.Image()
@@ -135,11 +152,29 @@ function AIRecognitionPanel() {
       
       {mode === 'local' && (
         <div className="tfjs-status">
-          {!tfjsLoaded ? (
+          {!tfjsLoaded && !isLoadingModel && (
             <button onClick={loadTfjsModel}>
-              Load TF.js Model
+              Load TF.js Model (113MB)
             </button>
-          ) : (
+          )}
+          {isLoadingModel && loadProgress && (
+            <div className="load-progress">
+              <div className="progress-bar">
+                <div 
+                  className="progress-fill"
+                  style={{ width: `${loadProgress.percentage}%` }}
+                />
+              </div>
+              <span className="progress-text">
+                {loadProgress.status === 'loading' 
+                  ? `Loading... ${loadProgress.percentage}%`
+                  : loadProgress.status === 'success' 
+                    ? '✓ Loaded'
+                    : '✗ Error'}
+              </span>
+            </div>
+          )}
+          {tfjsLoaded && !isLoadingModel && (
             <span className="status-badge ok">✓ TF.js Loaded</span>
           )}
         </div>
