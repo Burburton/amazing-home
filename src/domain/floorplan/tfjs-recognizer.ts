@@ -20,7 +20,10 @@ export interface TFJSRecognitionResult {
   confidence: number
 }
 
-const MODEL_URL = 'https://raw.githubusercontent.com/therenderengineer/TF2DeepFloorplan/main/model/model.json'
+// No publicly hosted TF.js floor plan model exists.
+// User must convert from SavedModel and host themselves.
+// See docs/deployment/tfjs-model-setup.md for conversion instructions.
+const MODEL_URL = '' // Placeholder - requires user-provided model
 
 export class FloorPlanRecognizer {
   private model: tf.GraphModel | null = null
@@ -29,15 +32,20 @@ export class FloorPlanRecognizer {
   async loadModel(): Promise<void> {
     if (this.loaded) return
 
-    try {
-      console.log('Loading TF.js floor plan model...')
-      this.model = await tf.loadGraphModel(MODEL_URL)
-      this.loaded = true
-      console.log('Model loaded successfully')
-    } catch (error) {
-      console.error('Model load failed, using fallback:', error)
-      this.loaded = true
+    if (MODEL_URL) {
+      try {
+        console.log('Loading TF.js floor plan model...')
+        this.model = await tf.loadGraphModel(MODEL_URL)
+        this.loaded = true
+        console.log('Model loaded successfully')
+        return
+      } catch (error) {
+        console.error('Model load failed, using fallback:', error)
+      }
     }
+
+    console.log('Using fallback pixel brightness detection (no TF.js model available)')
+    this.loaded = true
   }
 
   async predict(imageData: ImageData): Promise<TFJSRecognitionResult> {
