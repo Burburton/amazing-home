@@ -31,10 +31,13 @@ function Sidebar() {
       
       <LayoutSuggestionPanel />
       
-      <div className="panel-header">Tools</div>
-      <div className="panel-content space-y-2">
-        <div className="text-sm text-gray-600">2D Editor - Draw walls</div>
-        <div className="text-sm text-gray-600">3D Preview - View model</div>
+      <div className="panel-header">Keyboard Shortcuts</div>
+      <div className="panel-content space-y-1 text-xs text-gray-500">
+        <div><kbd className="px-1 bg-gray-200 rounded">Ctrl+Z</kbd> Undo</div>
+        <div><kbd className="px-1 bg-gray-200 rounded">Ctrl+Y</kbd> Redo</div>
+        <div><kbd className="px-1 bg-gray-200 rounded">Ctrl+S</kbd> Save</div>
+        <div><kbd className="px-1 bg-gray-200 rounded">Scroll</kbd> Zoom</div>
+        <div><kbd className="px-1 bg-gray-200 rounded">Drag</kbd> Pan (Select mode)</div>
       </div>
     </aside>
   )
