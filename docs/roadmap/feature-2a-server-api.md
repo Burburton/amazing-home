@@ -376,11 +376,35 @@ const resizeImage = async (imageUrl: string, maxSize = 512): Promise<string> => 
 
 | Day | Task | Status |
 |-----|------|--------|
-| 1 | 2A-01: API scaffold | Pending |
-| 2-3 | 2A-02: Model + Blob Storage | Pending |
-| 4 | 2A-03: Vercel deploy | Pending |
-| 5 | 2A-04: Browser integration | Pending |
+| 1 | 2A-01: API scaffold | ✅ **Completed** |
+| 2-3 | 2A-02: Model + Blob Storage | ✅ **Completed** (placeholder mode) |
+| 4 | 2A-03: Vercel deploy | ⏳ **In Progress** (requires user login) |
+| 5 | 2A-04: Browser integration | ✅ **Completed** |
 | 6-7 | 2A-05: Optimization | Pending |
+
+### Implementation Summary (Day 1)
+
+**Files Created**:
+- `api/recognize.py` - Main recognition endpoint (placeholder + production modes)
+- `api/health.py` - Health check with model status
+- `api/model_loader.py` - Weight download and caching from Blob Storage
+- `api/inference.py` - Preprocess, inference, postprocess pipeline
+- `api/requirements.txt` - Python dependencies (torch, scipy, scikit-image)
+- `src/services/recognitionApi.ts` - Browser API client
+- `src/components/shared/AIRecognitionPanel.tsx` - UI panel
+- `vercel.json` - Vercel deployment config
+
+**Verification**:
+- Tests: 86/86 passing ✅
+- Typecheck: Clean ✅
+- Build: Successful (1.4MB bundle) ✅
+- Git: Pushed to main ✅
+
+**Next Steps**:
+1. User runs `vercel` to deploy (requires Vercel login)
+2. Test placeholder API on Vercel
+3. Upload CubiCasa5k weights to Blob Storage
+4. Switch to production mode (`USE_PLACEHOLDER=false`)
 
 ---
 
