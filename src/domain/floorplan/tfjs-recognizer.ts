@@ -179,9 +179,11 @@ export class FloorPlanRecognizer {
   }
 
   private extractWalls(wallData: number[], scaleX: number, scaleY: number): TFJSRecognitionResult['walls'] {
-    const wallThreshold = 0.35
+    const wallThreshold = 0.55
     const width = 512
     const height = 512
+    const minWallLength = 40
+    const maxWallLength = 400
     
     const lines: Array<{
       start: { x: number; y: number }
@@ -199,24 +201,28 @@ export class FloorPlanRecognizer {
         if (val > wallThreshold && startX < 0) {
           startX = x
         } else if (val <= wallThreshold && startX >= 0) {
-          if (x - startX >= 30) {
+          const len = x - startX
+          if (len >= minWallLength && len <= maxWallLength) {
             lines.push({
               start: { x: startX, y },
               end: { x: x - 1, y },
               thickness: 10,
-              confidence: 0.8
+              confidence: 0.85
             })
           }
           startX = -1
         }
       }
-      if (startX >= 0 && width - startX >= 30) {
-        lines.push({
-          start: { x: startX, y },
-          end: { x: width - 1, y },
-          thickness: 10,
-          confidence: 0.8
-        })
+      if (startX >= 0) {
+        const len = width - startX
+        if (len >= minWallLength && len <= maxWallLength) {
+          lines.push({
+            start: { x: startX, y },
+            end: { x: width - 1, y },
+            thickness: 10,
+            confidence: 0.85
+          })
+        }
       }
     }
     
@@ -229,24 +235,28 @@ export class FloorPlanRecognizer {
         if (val > wallThreshold && startY < 0) {
           startY = y
         } else if (val <= wallThreshold && startY >= 0) {
-          if (y - startY >= 30) {
+          const len = y - startY
+          if (len >= minWallLength && len <= maxWallLength) {
             lines.push({
               start: { x, y: startY },
               end: { x, y: y - 1 },
               thickness: 10,
-              confidence: 0.8
+              confidence: 0.85
             })
           }
           startY = -1
         }
       }
-      if (startY >= 0 && height - startY >= 30) {
-        lines.push({
-          start: { x, y: startY },
-          end: { x, y: height - 1 },
-          thickness: 10,
-          confidence: 0.8
-        })
+      if (startY >= 0) {
+        const len = height - startY
+        if (len >= minWallLength && len <= maxWallLength) {
+          lines.push({
+            start: { x, y: startY },
+            end: { x, y: height - 1 },
+            thickness: 10,
+            confidence: 0.85
+          })
+        }
       }
     }
     
