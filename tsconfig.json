@@ -29,7 +29,8 @@
       "@components/*": ["src/components/*"],
       "@domain/*": ["src/domain/*"],
       "@store/*": ["src/store/*"],
-      "@utils/*": ["src/utils/*"]
+      "@utils/*": ["src/utils/*"],
+      "@services/*": ["src/services/*"]
     }
   },
   "include": ["src", "tests"],

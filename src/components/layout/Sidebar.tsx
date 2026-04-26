@@ -3,6 +3,7 @@ import LayoutSuggestionPanel from '@components/layout/LayoutSuggestionPanel'
 import VersionManager from '@components/layout/VersionManager'
 import WallDetectionPanel from '@components/shared/WallDetectionPanel'
 import WallCorrectionPanel from '@components/shared/WallCorrectionPanel'
+import AIRecognitionPanel from '@components/shared/AIRecognitionPanel'
 import { useFloorPlanStore } from '@store/useFloorPlanStore'
 import { FurnitureCategory } from '@domain/floorplan/types'
 
@@ -20,6 +21,8 @@ function Sidebar() {
         <div className="text-sm text-gray-700">{document.project.name}</div>
         <div className="text-xs text-gray-400">{document.walls.length} walls, {document.furniture.length} furniture</div>
       </div>
+      
+      <AIRecognitionPanel />
       
       <WallDetectionPanel />
       
