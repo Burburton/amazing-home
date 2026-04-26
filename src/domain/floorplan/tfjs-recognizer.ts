@@ -156,15 +156,74 @@ export class FloorPlanRecognizer {
     originalWidth: number,
     originalHeight: number
   ): TFJSRecognitionResult {
-    const roomIconData = Array.from(roomIconMask.dataSync())
-    const wallData = Array.from(wallMask.dataSync())
+    const roomShape = roomIconMask.shape
+    const wallShape = wallMask.shape
+    console.log('roomIconMask shape:', roomShape)
+    console.log('wallMask shape:', wallShape)
+
+    const roomChannels = roomShape[3] ?? roomShape[2] ?? 1
+    const wallChannels = wallShape[3] ?? wallShape[2] ?? 1
+    console.log('roomChannels:', roomChannels, 'wallChannels:', wallChannels)
+
+    const height = 512
+    const width = 512
+
+    let wallProb: number[]
+
+    if (wallChannels > 1) {
+      const wallRawData = Array.from(wallMask.dataSync())
+      const wallChannelData: number[][] = []
+      for (let c = 0; c < wallChannels; c++) {
+        const channel: number[] = []
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            const idx = c * height * width + y * width + x
+            channel.push(wallRawData[idx] ?? 0)
+          }
+        }
+        wallChannelData.push(channel)
+      }
+
+      wallProb = this.softmaxAllChannels(wallChannelData)
+    } else {
+      const wallRawData = Array.from(wallMask.dataSync())
+      const minVal = Math.min(...wallRawData)
+      const maxVal = Math.max(...wallRawData)
+      console.log('wallRawData range:', minVal, '-', maxVal)
+
+      if (maxVal <= 1 && minVal >= 0) {
+        wallProb = wallRawData
+      } else {
+        wallProb = this.sigmoid(wallRawData)
+      }
+    }
+
+    const roomRawData = Array.from(roomIconMask.dataSync())
+    let roomData: number[]
+
+    if (roomChannels > 12) {
+      const roomChannelData: number[][] = []
+      for (let c = 0; c < roomChannels; c++) {
+        const channel: number[] = []
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            const idx = c * height * width + y * width + x
+            channel.push(roomRawData[idx] ?? 0)
+          }
+        }
+        roomChannelData.push(channel)
+      }
+      roomData = this.getChannel2Probability(roomChannelData)
+    } else {
+      roomData = roomRawData
+    }
 
     const scaleX = originalWidth / 512
     const scaleY = originalHeight / 512
 
-    const walls = this.extractWalls(wallData, scaleX, scaleY)
-    const rooms = this.extractRooms(roomIconData, scaleX, scaleY)
-    const icons = this.extractIcons(roomIconData, scaleX, scaleY)
+    const walls = this.extractWallsFromProb(wallProb, scaleX, scaleY)
+    const rooms = this.extractRooms(roomData, scaleX, scaleY)
+    const icons = this.extractIcons(roomData, scaleX, scaleY)
 
     const overallConfidence = walls.length > 0
       ? walls.reduce((sum, w) => sum + w.confidence, 0) / walls.length
@@ -178,7 +237,49 @@ export class FloorPlanRecognizer {
     }
   }
 
-  private extractWalls(wallData: number[], scaleX: number, scaleY: number): TFJSRecognitionResult['walls'] {
+  private softmaxAllChannels(channelData: number[][]): number[] {
+    const numChannels = channelData.length
+    const size = channelData[0]?.length ?? 0
+    const result: number[] = []
+
+    for (let i = 0; i < size; i++) {
+      const values = channelData.map(c => c[i] ?? 0)
+      const maxVal = Math.max(...values)
+      const expValues = values.map(v => Math.exp(v - maxVal))
+      const sumExp = expValues.reduce((a, b) => a + b, 0)
+
+      let maxIdx = 0
+      let maxProb = 0
+      for (let c = 0; c < numChannels; c++) {
+        const prob = expValues[c]! / sumExp
+        if (prob > maxProb) {
+          maxProb = prob
+          maxIdx = c
+        }
+      }
+      result.push(maxIdx === 2 ? maxProb : 0)
+    }
+
+    return result
+  }
+
+  private getChannel2Probability(channelData: number[][]): number[] {
+    const size = channelData[0]?.length ?? 0
+    const wallChannel = channelData[2] ?? []
+    const result: number[] = []
+
+    for (let i = 0; i < size; i++) {
+      result.push(wallChannel[i] ?? 0)
+    }
+
+    return result
+  }
+
+  private sigmoid(values: number[]): number[] {
+    return values.map(v => 1 / (1 + Math.exp(-v)))
+  }
+
+  private extractWallsFromProb(wallProb: number[], scaleX: number, scaleY: number): TFJSRecognitionResult['walls'] {
     const wallThreshold = 0.35
     const width = 512
     const height = 512
@@ -196,7 +297,7 @@ export class FloorPlanRecognizer {
       let startX = -1
       for (let x = 10; x < width - 10; x++) {
         const idx = y * width + x
-        const val = wallData[idx] ?? 0
+        const val = wallProb[idx] ?? 0
         
         if (val > wallThreshold && startX < 0) {
           startX = x
@@ -230,7 +331,7 @@ export class FloorPlanRecognizer {
       let startY = -1
       for (let y = 10; y < height - 10; y++) {
         const idx = y * width + x
-        const val = wallData[idx] ?? 0
+        const val = wallProb[idx] ?? 0
         
         if (val > wallThreshold && startY < 0) {
           startY = y
