@@ -183,13 +183,20 @@ export class FloorPlanRecognizer {
 
     const wallProb = this.extractWallChannelProbability(roomTypeChannelData)
 
+    const wallProbMax = Math.max(...wallProb)
+    const wallProbMin = Math.min(...wallProb)
+    const wallProbAboveThreshold = wallProb.filter(p => p > 0.35).length
+    console.log('wallProb range:', wallProbMin, '-', wallProbMax, 'pixels above 0.35:', wallProbAboveThreshold)
+
     const iconRawData = Array.from(iconTensor.dataSync())
 
     const scaleX = originalWidth / 512
     const scaleY = originalHeight / 512
 
     const walls = this.extractWallsFromProb(wallProb, scaleX, scaleY)
+    console.log('walls extracted:', walls.length)
     const rooms = this.extractRooms(roomTypeRawData, scaleX, scaleY, roomTypeChannels)
+    console.log('rooms extracted:', rooms.length, 'room types:', rooms.map(r => r.type))
     const icons = this.extractIcons(iconRawData, scaleX, scaleY, iconChannels)
 
     const overallConfidence = walls.length > 0
