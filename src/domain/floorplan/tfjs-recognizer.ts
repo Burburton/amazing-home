@@ -251,11 +251,11 @@ export class FloorPlanRecognizer {
   }
 
   private extractWallsFromProb(wallProb: number[], scaleX: number, scaleY: number): TFJSRecognitionResult['walls'] {
-    const wallThreshold = 0.35
+    const wallThreshold = 0.3
     const width = 512
     const height = 512
-    const minWallLength = 50
-    const maxWallLength = 150
+    const minWallLength = 20
+    const maxWallLength = 500
     
     const lines: Array<{
       start: { x: number; y: number }
@@ -331,8 +331,10 @@ export class FloorPlanRecognizer {
         }
       }
     }
-    
+
+    console.log('raw wall segments before merge:', lines.length)
     const merged = this.mergeWallLines(lines)
+    console.log('wall segments after merge:', merged.length)
     
     return merged.map(line => ({
       start: { x: Math.round(line.start.x * scaleX), y: Math.round(line.start.y * scaleY) },
