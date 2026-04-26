@@ -279,7 +279,7 @@ interface RecognitionResponse {
 | **Google Cloud Run** | $0.01/second | Optional | GPU adds cost |
 | **Self-hosted VPS** | $10-20/month | Optional | Full control |
 
-**Recommended**: Railway ($5/month) for simplicity, or Vercel free tier for prototyping.
+**Recommended**: Vercel (free) for testing → Railway ($5/month) for production
 
 ### TensorFlow.js Bundle Impact
 
@@ -334,14 +334,16 @@ interface RecognitionResponse {
 
 ## 9. Decision Points
 
-**Decision 1: Hosting Platform**
+**Decision 1: Hosting Platform (Updated)**
 
 | Option | Cost | Effort | Recommendation |
 |--------|------|--------|----------------|
-| Railway | $5/month | Low | ✅ Start here |
-| Vercel | Free | Low | ✅ Alternative |
+| Vercel | **Free** | Low | ✅ **Start here** |
+| Railway | $5/month | Low | Production upgrade |
 | AWS | Pay-per-use | Medium | Scale later |
 | Self-hosted | $10-20/month | High | Advanced users |
+
+**Migration path**: Vercel (free testing) → Railway (stable production)
 
 **Decision 2: Browser vs API First**
 
