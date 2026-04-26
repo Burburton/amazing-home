@@ -20,9 +20,11 @@ export interface TFJSRecognitionResult {
   confidence: number
 }
 
-// Local TF.js model from TF2DeepFloorplan conversion
-// Use relative path for GitHub Pages compatibility
-const MODEL_URL = './tfjs-model/model.json'
+function getModelUrl(): string {
+  const base = window.location.origin
+  const path = window.location.pathname.replace(/\/$/, '')
+  return `${base}${path}/tfjs-model/model.json`
+}
 
 const ICON_TYPES = [
   'door', 'window', 'bed', 'table', 'sofa', 'chair',
@@ -37,8 +39,9 @@ export class FloorPlanRecognizer {
     if (this.loaded) return
 
     try {
-      console.log('Loading TF.js floor plan model from:', MODEL_URL)
-      this.model = await tf.loadGraphModel(MODEL_URL)
+      const modelUrl = getModelUrl()
+      console.log('Loading TF.js floor plan model from:', modelUrl)
+      this.model = await tf.loadGraphModel(modelUrl)
       this.loaded = true
       console.log('Model loaded successfully')
     } catch (error) {
