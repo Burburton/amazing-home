@@ -15,14 +15,11 @@ function WallDetectionPanel() {
   const [edgePreviewUrl, setEdgePreviewUrl] = useState<string | null>(null)
   const [showAdvanced, setShowAdvanced] = useState(false)
   
-  const [minLineLength, setMinLineLength] = useState(50)
+  const [minLength, setMinLength] = useState(20)
   const [angleTolerance, setAngleTolerance] = useState(5)
-  const [cannyLow, setCannyLow] = useState(50)
-  const [cannyHigh, setCannyHigh] = useState(150)
-  const [houghThreshold, setHoughThreshold] = useState(100)
-  const [maxLineGap, setMaxLineGap] = useState(10)
   const [maxWallThickness, setMaxWallThickness] = useState(30)
-  const [minWallLength, setMinWallLength] = useState(80)
+  const [wallDarkness, setWallDarkness] = useState(80)
+  const [minWallDensity, setMinWallDensity] = useState(0.3)
   
   const [candidateWalls, setCandidateWalls] = useState<CandidateWall[]>([])
   
@@ -45,22 +42,18 @@ function WallDetectionPanel() {
       })
       
       const options = {
-        cannyLowThreshold: cannyLow,
-        cannyHighThreshold: cannyHigh,
-        houghThreshold,
-        minLineLength,
-        maxLineGap,
+        minLength,
         angleTolerance,
-        minLength: minLineLength,
         maxWallThickness,
-        minWallLength,
+        wallDarkness,
+        minWallDensity,
       }
       
       const walls = detectWallsFromImage(img, options)
       
       const candidates: CandidateWall[] = walls.map((wall, index) => ({
         ...wall,
-        id: `candidate-${index}`,
+        id: wall.id,
         confidence: Math.min(100, Math.max(50, 100 - index * 5)),
         accepted: false,
         rejected: false,
@@ -135,12 +128,12 @@ function WallDetectionPanel() {
   return (
     <div className="p-4 space-y-3">
       <div className="text-xs font-medium text-gray-600">
-        Wall Detection (Canny + Hough)
+        Wall Detection (Dark Pixel + Skeleton)
       </div>
       
       <div className="text-xs text-gray-400">
-        Industry-standard edge detection using Canny + Hough transform.
-        Works on floor plans with walls at any angle.
+        Detects dark wall lines, removes noise, extracts skeleton.
+        Better for thick walls and furniture filtering.
       </div>
       
       {!hasImage && (
@@ -153,36 +146,33 @@ function WallDetectionPanel() {
         <div className="space-y-2">
           <div>
             <label className="block text-xs text-gray-500 mb-1">
-              Min Line Length ({minLineLength}px)
+              Wall Darkness ({wallDarkness})
             </label>
             <input
               type="range"
-              min={20}
-              max={200}
-              value={minLineLength}
-              onChange={(e) => setMinLineLength(parseInt(e.target.value))}
+              min={30}
+              max={150}
+              value={wallDarkness}
+              onChange={(e) => setWallDarkness(parseInt(e.target.value))}
               className="w-full"
             />
             <div className="text-xs text-gray-400">
-              Higher = fewer, longer walls only
+              Lower = detect lighter lines (more noise)
             </div>
           </div>
           
           <div>
             <label className="block text-xs text-gray-500 mb-1">
-              Angle Tolerance ({angleTolerance}°)
+              Min Line Length ({minLength}px)
             </label>
             <input
               type="range"
-              min={1}
-              max={15}
-              value={angleTolerance}
-              onChange={(e) => setAngleTolerance(parseInt(e.target.value))}
+              min={10}
+              max={100}
+              value={minLength}
+              onChange={(e) => setMinLength(parseInt(e.target.value))}
               className="w-full"
             />
-            <div className="text-xs text-gray-400">
-              Higher = allow more diagonal walls
-            </div>
           </div>
           
           <button
@@ -196,63 +186,18 @@ function WallDetectionPanel() {
             <div className="space-y-2 p-2 bg-gray-50 rounded border border-gray-200">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">
-                  Canny Low ({cannyLow})
+                  Angle Tolerance ({angleTolerance}°)
                 </label>
                 <input
                   type="range"
-                  min={10}
-                  max={100}
-                  value={cannyLow}
-                  onChange={(e) => setCannyLow(parseInt(e.target.value))}
-                  className="w-full"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">
-                  Canny High ({cannyHigh})
-                </label>
-                <input
-                  type="range"
-                  min={50}
-                  max={200}
-                  value={cannyHigh}
-                  onChange={(e) => setCannyHigh(parseInt(e.target.value))}
-                  className="w-full"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">
-                  Hough Threshold ({houghThreshold})
-                </label>
-                <input
-                  type="range"
-                  min={20}
-                  max={300}
-                  value={houghThreshold}
-                  onChange={(e) => setHoughThreshold(parseInt(e.target.value))}
+                  min={1}
+                  max={15}
+                  value={angleTolerance}
+                  onChange={(e) => setAngleTolerance(parseInt(e.target.value))}
                   className="w-full"
                 />
                 <div className="text-xs text-gray-400">
-                  Higher = fewer, more prominent lines
-                </div>
-              </div>
-              
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">
-                  Max Line Gap ({maxLineGap}px)
-                </label>
-                <input
-                  type="range"
-                  min={5}
-                  max={30}
-                  value={maxLineGap}
-                  onChange={(e) => setMaxLineGap(parseInt(e.target.value))}
-                  className="w-full"
-                />
-                <div className="text-xs text-gray-400">
-                  Connects gaps within this distance
+                  Higher = allow more diagonal walls
                 </div>
               </div>
               
@@ -269,24 +214,24 @@ function WallDetectionPanel() {
                   className="w-full"
                 />
                 <div className="text-xs text-gray-400">
-                  Merge parallel lines within this distance (thick walls)
+                  Merge parallel lines within this distance
                 </div>
               </div>
               
               <div>
                 <label className="block text-xs text-gray-500 mb-1">
-                  Min Wall Length ({minWallLength}px)
+                  Min Wall Density ({Math.round(minWallDensity * 100)}%)
                 </label>
                 <input
                   type="range"
-                  min={50}
-                  max={200}
-                  value={minWallLength}
-                  onChange={(e) => setMinWallLength(parseInt(e.target.value))}
+                  min={10}
+                  max={80}
+                  value={Math.round(minWallDensity * 100)}
+                  onChange={(e) => setMinWallDensity(parseInt(e.target.value) / 100)}
                   className="w-full"
                 />
                 <div className="text-xs text-gray-400">
-                  Filter out short lines (furniture)
+                  Filter lines with low wall pixel density
                 </div>
               </div>
             </div>
@@ -304,10 +249,10 @@ function WallDetectionPanel() {
           {previewUrl && (
             <div className="mt-3 space-y-2">
               <div>
-                <div className="text-xs text-gray-500 mb-1">Edge Detection Preview</div>
+                <div className="text-xs text-gray-500 mb-1">Dark Pixel Mask Preview</div>
                 <img 
                   src={edgePreviewUrl ?? ''} 
-                  alt="Edge detection preview" 
+                  alt="Mask preview" 
                   className="w-full border border-gray-200 rounded"
                 />
               </div>
@@ -359,15 +304,12 @@ function WallDetectionPanel() {
                           : 'bg-gray-50 border border-gray-200'
                     }`}
                   >
-                    <div className="flex-1">
+                    <div className="flex-1 truncate">
                       <span className="text-gray-700">
                         {getWallDirection(candidate)} wall
                       </span>
                       <span className="text-gray-400 ml-1">
                         ({getWallLength(candidate)}px)
-                      </span>
-                      <span className="text-gray-400 ml-1">
-                        conf: {candidate.confidence}%
                       </span>
                     </div>
                     <div className="flex gap-1">
@@ -419,8 +361,8 @@ function WallDetectionPanel() {
       )}
       
       <div className="text-xs text-gray-400 border-t border-gray-200 pt-2 mt-2">
-        Using Canny edge detection + Hough transform. Detects walls at any angle.
-        Adjust parameters if detection is too sensitive or missing walls.
+        Method: Extract dark pixels → Morphological opening → Skeleton → Line detection.
+        Best for floor plans with black/dark wall lines.
       </div>
     </div>
   )

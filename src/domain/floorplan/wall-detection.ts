@@ -4,37 +4,24 @@ interface DetectedLine {
   start: Point2D
   end: Point2D
   thickness: number
-  isParallelPair?: boolean
 }
 
 interface DetectionOptions {
-  threshold?: number
   minLength?: number
   wallThickness?: number
-  cannyLowThreshold?: number
-  cannyHighThreshold?: number
-  gaussianSigma?: number
-  houghThreshold?: number
-  minLineLength?: number
-  maxLineGap?: number
   angleTolerance?: number
   maxWallThickness?: number
-  minWallLength?: number
+  wallDarkness?: number
+  minWallDensity?: number
 }
 
 const DEFAULT_OPTIONS: Required<DetectionOptions> = {
-  threshold: 100,
   minLength: 20,
   wallThickness: 10,
-  cannyLowThreshold: 50,
-  cannyHighThreshold: 150,
-  gaussianSigma: 1,
-  houghThreshold: 100,
-  minLineLength: 50,
-  maxLineGap: 10,
   angleTolerance: 5,
   maxWallThickness: 30,
-  minWallLength: 80,
+  wallDarkness: 80,
+  minWallDensity: 0.3,
 }
 
 export function detectWallsFromImage(
@@ -53,24 +40,26 @@ export function detectWallsFromImage(
   
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
   
-  const grayscale = toGrayscale(imageData)
-  const blurred = applyGaussianBlur(grayscale, canvas.width, canvas.height, opts.gaussianSigma)
-  const edges = applyCannyEdgeDetection(blurred, canvas.width, canvas.height, 
-    opts.cannyLowThreshold, opts.cannyHighThreshold)
-  const lines = applyHoughLinesP(edges, canvas.width, canvas.height,
-    opts.houghThreshold, opts.minLineLength, opts.maxLineGap)
+  const darkMask = extractDarkPixels(imageData, opts.wallDarkness)
+  
+  const cleanedMask = morphologicalOpening(darkMask, canvas.width, canvas.height, 3)
+  
+  const skeleton = skeletonizeMask(cleanedMask, canvas.width, canvas.height)
+  
+  const lines = detectLinesFromSkeleton(skeleton, canvas.width, canvas.height, opts.minLength)
   
   const filteredLines = filterLines(lines, opts.minLength, opts.angleTolerance)
   
-  const furnitureLines = detectFurnitureLines(filteredLines, opts.minWallLength)
-  const nonFurnitureLines = filteredLines.filter(l => !furnitureLines.includes(l))
+  const wallCandidates = filterByDensity(filteredLines, cleanedMask, canvas.width, canvas.height, opts.minWallDensity)
   
-  const mergedParallelLines = mergeParallelLines(nonFurnitureLines, opts.maxWallThickness)
+  const mergedParallelLines = mergeParallelLines(wallCandidates, opts.maxWallThickness)
   
   const finalLines = mergeNearbyLines(mergedParallelLines, 5)
   
+  const timestamp = Date.now()
+  
   return finalLines.map((line, index) => ({
-    id: `detected-wall-${index}`,
+    id: `wall-${timestamp}-${index}`,
     start: line.start,
     end: line.end,
     thickness: line.thickness || opts.wallThickness,
@@ -78,323 +67,249 @@ export function detectWallsFromImage(
   }))
 }
 
-function toGrayscale(imageData: ImageData): Uint8Array {
+function extractDarkPixels(imageData: ImageData, darknessThreshold: number): Uint8Array {
   const data = imageData.data
-  const grayscale = new Uint8Array(data.length / 4)
+  const mask = new Uint8Array(data.length / 4)
   
-  for (let i = 0; i < grayscale.length; i++) {
+  for (let i = 0; i < mask.length; i++) {
     const r = data[i * 4] ?? 0
     const g = data[i * 4 + 1] ?? 0
     const b = data[i * 4 + 2] ?? 0
-    grayscale[i] = Math.round(0.299 * r + 0.587 * g + 0.114 * b)
+    const gray = 0.299 * r + 0.587 * g + 0.114 * b
+    
+    mask[i] = gray < darknessThreshold ? 1 : 0
   }
   
-  return grayscale
+  return mask
 }
 
-function applyGaussianBlur(
-  grayscale: Uint8Array,
-  width: number,
-  height: number,
-  sigma: number
-): Uint8Array {
-  const kernelSize = 5
-  const kernel = createGaussianKernel(kernelSize, sigma)
+function morphologicalOpening(mask: Uint8Array, width: number, height: number, kernelSize: number): Uint8Array {
   const half = Math.floor(kernelSize / 2)
   
-  const blurred = new Uint8Array(grayscale.length)
-  
+  const eroded = new Uint8Array(mask.length)
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      let sum = 0
-      let weightSum = 0
-      
-      for (let ky = 0; ky < kernelSize; ky++) {
-        for (let kx = 0; kx < kernelSize; kx++) {
-          const px = Math.min(Math.max(x + kx - half, 0), width - 1)
-          const py = Math.min(Math.max(y + ky - half, 0), height - 1)
-          const weight = kernel[ky * kernelSize + kx] ?? 0
-          sum += (grayscale[py * width + px] ?? 0) * weight
-          weightSum += weight
-        }
-      }
-      
-      blurred[y * width + x] = Math.round(sum / weightSum)
-    }
-  }
-  
-  return blurred
-}
-
-function createGaussianKernel(size: number, sigma: number): number[] {
-  const kernel: number[] = []
-  const half = size / 2
-  const sigma2 = 2 * sigma * sigma
-  
-  for (let y = 0; y < size; y++) {
-    for (let x = 0; x < size; x++) {
-      const dx = x - half
-      const dy = y - half
-      kernel.push(Math.exp(-(dx * dx + dy * dy) / sigma2))
-    }
-  }
-  
-  return kernel
-}
-
-function applyCannyEdgeDetection(
-  grayscale: Uint8Array,
-  width: number,
-  height: number,
-  lowThreshold: number,
-  highThreshold: number
-): Uint8Array {
-  const { gradientX, gradientY, magnitude } = computeSobelGradient(grayscale, width, height)
-  const suppressed = nonMaximumSuppression(magnitude, gradientX, gradientY, width, height)
-  const edges = edgeTracking(suppressed, width, height, lowThreshold, highThreshold)
-  return edges
-}
-
-function computeSobelGradient(
-  grayscale: Uint8Array,
-  width: number,
-  height: number
-): { gradientX: Float32Array, gradientY: Float32Array, magnitude: Float32Array } {
-  const gradientX = new Float32Array(grayscale.length)
-  const gradientY = new Float32Array(grayscale.length)
-  const magnitude = new Float32Array(grayscale.length)
-  
-  const sobelX = [-1, 0, 1, -2, 0, 2, -1, 0, 1]
-  const sobelY = [-1, -2, -1, 0, 0, 0, 1, 2, 1]
-  
-  for (let y = 1; y < height - 1; y++) {
-    for (let x = 1; x < width - 1; x++) {
-      let gx = 0
-      let gy = 0
-      
-      for (let ky = -1; ky <= 1; ky++) {
-        for (let kx = -1; kx <= 1; kx++) {
-          const pixel = grayscale[(y + ky) * width + (x + kx)] ?? 0
-          const kernelIdx = (ky + 1) * 3 + (kx + 1)
-          gx += pixel * (sobelX[kernelIdx] ?? 0)
-          gy += pixel * (sobelY[kernelIdx] ?? 0)
-        }
-      }
-      
-      const idx = y * width + x
-      gradientX[idx] = gx
-      gradientY[idx] = gy
-      magnitude[idx] = Math.sqrt(gx * gx + gy * gy)
-    }
-  }
-  
-  return { gradientX, gradientY, magnitude }
-}
-
-function nonMaximumSuppression(
-  magnitude: Float32Array,
-  gradientX: Float32Array,
-  gradientY: Float32Array,
-  width: number,
-  height: number
-): Uint8Array {
-  const suppressed = new Uint8Array(magnitude.length)
-  
-  for (let y = 1; y < height - 1; y++) {
-    for (let x = 1; x < width - 1; x++) {
-      const idx = y * width + x
-      const mag = magnitude[idx] ?? 0
-      
-      if (mag === 0) continue
-      
-      const gx = gradientX[idx] ?? 0
-      const gy = gradientY[idx] ?? 0
-      const angle = Math.atan2(gy, gx) * 180 / Math.PI
-      
-      let neighbor1: number
-      let neighbor2: number
-      
-      if ((angle >= -22.5 && angle < 22.5) || (angle >= 157.5 && angle < 180) || (angle >= -180 && angle < -157.5)) {
-        neighbor1 = magnitude[idx - 1] ?? 0
-        neighbor2 = magnitude[idx + 1] ?? 0
-      } else if ((angle >= 22.5 && angle < 67.5) || (angle >= -157.5 && angle < -112.5)) {
-        neighbor1 = magnitude[(y - 1) * width + (x + 1)] ?? 0
-        neighbor2 = magnitude[(y + 1) * width + (x - 1)] ?? 0
-      } else if ((angle >= 67.5 && angle < 112.5) || (angle >= -112.5 && angle < -67.5)) {
-        neighbor1 = magnitude[(y - 1) * width + x] ?? 0
-        neighbor2 = magnitude[(y + 1) * width + x] ?? 0
-      } else {
-        neighbor1 = magnitude[(y - 1) * width + (x - 1)] ?? 0
-        neighbor2 = magnitude[(y + 1) * width + (x + 1)] ?? 0
-      }
-      
-      if (mag >= neighbor1 && mag >= neighbor2) {
-        suppressed[idx] = Math.round(mag)
-      }
-    }
-  }
-  
-  return suppressed
-}
-
-function edgeTracking(
-  suppressed: Uint8Array,
-  width: number,
-  height: number,
-  lowThreshold: number,
-  highThreshold: number
-): Uint8Array {
-  const edges = new Uint8Array(suppressed.length)
-  const strong = 255
-  const weak = 50
-  
-  for (let i = 0; i < suppressed.length; i++) {
-    const val = suppressed[i] ?? 0
-    if (val >= highThreshold) {
-      edges[i] = strong
-    } else if (val >= lowThreshold) {
-      edges[i] = weak
-    }
-  }
-  
-  for (let y = 1; y < height - 1; y++) {
-    for (let x = 1; x < width - 1; x++) {
-      const idx = y * width + x
-      
-      if (edges[idx] === weak) {
-        let hasStrongNeighbor = false
-        for (let dy = -1; dy <= 1; dy++) {
-          for (let dx = -1; dx <= 1; dx++) {
-            if (edges[(y + dy) * width + (x + dx)] === strong) {
-              hasStrongNeighbor = true
-              break
-            }
+      let allOnes = true
+      for (let ky = -half; ky <= half && allOnes; ky++) {
+        for (let kx = -half; kx <= half && allOnes; kx++) {
+          const px = Math.min(Math.max(x + kx, 0), width - 1)
+          const py = Math.min(Math.max(y + ky, 0), height - 1)
+          if (mask[py * width + px] === 0) {
+            allOnes = false
           }
-          if (hasStrongNeighbor) break
+        }
+      }
+      eroded[y * width + x] = allOnes ? 1 : 0
+    }
+  }
+  
+  const dilated = new Uint8Array(mask.length)
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let anyOne = false
+      for (let ky = -half; ky <= half && !anyOne; ky++) {
+        for (let kx = -half; kx <= half && !anyOne; kx++) {
+          const px = Math.min(Math.max(x + kx, 0), width - 1)
+          const py = Math.min(Math.max(y + ky, 0), height - 1)
+          if (eroded[py * width + px] === 1) {
+            anyOne = true
+          }
+        }
+      }
+      dilated[y * width + x] = anyOne ? 1 : 0
+    }
+  }
+  
+  return dilated
+}
+
+function skeletonizeMask(mask: Uint8Array, width: number, height: number): Uint8Array {
+  const skeleton = new Uint8Array(mask.length)
+  const temp = new Uint8Array(mask.length)
+  
+  for (let i = 0; i < mask.length; i++) {
+    skeleton[i] = mask[i] ?? 0
+    temp[i] = mask[i] ?? 0
+  }
+  
+  const neighbors: [number, number][] = [
+    [-1, -1], [-1, 0], [-1, 1],
+    [0, -1], [0, 1],
+    [1, -1], [1, 0], [1, 1]
+  ]
+  
+  for (let iteration = 0; iteration < 10; iteration++) {
+    let changed = false
+    
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        if (temp[y * width + x] === 0) continue
+        
+        let count = 0
+        for (const [dy, dx] of neighbors) {
+          if (temp[(y + dy) * width + (x + dx)] === 1) count++
         }
         
-        edges[idx] = hasStrongNeighbor ? strong : 0
+        if (count >= 2 && count <= 6) {
+          let transitions = 0
+          const order: [number, number][] = [[-1, -1], [-1, 0], [-1, 1], [0, 1], [1, 1], [1, 0], [1, -1], [0, -1]]
+          for (let i = 0; i < order.length; i++) {
+            const curr = order[i]!
+            const next = order[(i + 1) % order.length]!
+            const v1 = temp[(y + curr[0]) * width + (x + curr[1])] ?? 0
+            const v2 = temp[(y + next[0]) * width + (x + next[1])] ?? 0
+            if (v1 === 0 && v2 === 1) transitions++
+          }
+          
+          if (transitions === 1) {
+            skeleton[y * width + x] = 0
+            changed = true
+          }
+        }
       }
     }
+    
+    for (let i = 0; i < skeleton.length; i++) {
+      temp[i] = skeleton[i] ?? 0
+    }
+    
+    if (!changed) break
   }
   
-  return edges
+  return skeleton
 }
 
-function applyHoughLinesP(
-  edges: Uint8Array,
-  width: number,
-  height: number,
-  threshold: number,
-  minLineLength: number,
-  maxLineGap: number
-): DetectedLine[] {
+function detectLinesFromSkeleton(skeleton: Uint8Array, width: number, height: number, minLength: number): DetectedLine[] {
   const lines: DetectedLine[] = []
-  
-  const rhoMax = Math.sqrt(width * width + height * height)
-  const rhoSteps = Math.round(rhoMax)
-  const thetaSteps = 180
-  const accumulator = new Uint32Array(rhoSteps * thetaSteps)
+  const visited = new Uint8Array(skeleton.length)
   
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      if (edges[y * width + x] === 255) {
-        for (let theta = 0; theta < thetaSteps; theta++) {
-          const thetaRad = theta * Math.PI / 180
-          const rho = Math.round(x * Math.cos(thetaRad) + y * Math.sin(thetaRad))
-          if (rho >= 0 && rho < rhoSteps) {
-            const accIdx = rho * thetaSteps + theta
-            if (accIdx >= 0 && accIdx < accumulator.length) {
-              accumulator[accIdx] = (accumulator[accIdx] ?? 0) + 1
-            }
-          }
+      const idx = y * width + x
+      if (skeleton[idx] === 1 && visited[idx] === 0) {
+        const segment = traceLineSegment(skeleton, visited, width, height, x, y, minLength)
+        if (segment) {
+          lines.push(segment)
         }
       }
-    }
-  }
-  
-  const peaks: { rho: number, theta: number }[] = []
-  for (let rho = 0; rho < rhoSteps; rho++) {
-    for (let theta = 0; theta < thetaSteps; theta++) {
-      const votes = accumulator[rho * thetaSteps + theta] ?? 0
-      if (votes >= threshold) {
-        peaks.push({ rho, theta })
-      }
-    }
-  }
-  
-  for (const peak of peaks) {
-    const thetaRad = peak.theta * Math.PI / 180
-    const cosT = Math.cos(thetaRad)
-    const sinT = Math.sin(thetaRad)
-    
-    const points: Point2D[] = []
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        if (edges[y * width + x] === 255) {
-          const r = x * cosT + y * sinT
-          if (Math.abs(r - peak.rho) < 2) {
-            points.push({ x, y })
-          }
-        }
-      }
-    }
-    
-    if (points.length < 2) continue
-    
-    const lineAngleDeg = peak.theta < 90 ? peak.theta + 90 : peak.theta - 90
-    const lineDirX = Math.cos(lineAngleDeg * Math.PI / 180)
-    const lineDirY = Math.sin(lineAngleDeg * Math.PI / 180)
-    
-    points.sort((a, b) => {
-      const projA = a.x * lineDirX + a.y * lineDirY
-      const projB = b.x * lineDirX + b.y * lineDirY
-      return projA - projB
-    })
-    
-    let segmentStart = points[0]!
-    let lastPoint = points[0]!
-    
-    for (let i = 1; i < points.length; i++) {
-      const point = points[i]!
-      const gap = Math.sqrt((point.x - lastPoint.x) ** 2 + (point.y - lastPoint.y) ** 2)
-      
-      if (gap <= maxLineGap) {
-        lastPoint = point
-      } else {
-        const segmentLength = Math.sqrt(
-          (lastPoint.x - segmentStart.x) ** 2 + 
-          (lastPoint.y - segmentStart.y) ** 2
-        )
-        
-        if (segmentLength >= minLineLength) {
-          lines.push({
-            start: segmentStart,
-            end: lastPoint,
-            thickness: 10,
-          })
-        }
-        
-        segmentStart = point
-        lastPoint = point
-      }
-    }
-    
-    const segmentLength = Math.sqrt(
-      (lastPoint.x - segmentStart.x) ** 2 + 
-      (lastPoint.y - segmentStart.y) ** 2
-    )
-    
-    if (segmentLength >= minLineLength) {
-      lines.push({
-        start: segmentStart,
-        end: lastPoint,
-        thickness: 10,
-      })
     }
   }
   
   return lines
+}
+
+function traceLineSegment(
+  skeleton: Uint8Array,
+  visited: Uint8Array,
+  width: number,
+  height: number,
+  startX: number,
+  startY: number,
+  minLength: number
+): DetectedLine | null {
+  const points: Point2D[] = []
+  let x = startX
+  let y = startY
+  
+  const directions: [number, number][] = [
+    [-1, 0], [1, 0], [0, -1], [0, 1],
+    [-1, -1], [-1, 1], [1, -1], [1, 1]
+  ]
+  
+  while (true) {
+    const idx = y * width + x
+    if (skeleton[idx] === 0 || visited[idx] === 1) break
+    
+    points.push({ x, y })
+    visited[idx] = 1
+    
+    let found = false
+    for (const [dy, dx] of directions) {
+      const nx = x + dx
+      const ny = y + dy
+      if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+        const nidx = ny * width + nx
+        if (skeleton[nidx] === 1 && visited[nidx] === 0) {
+          x = nx
+          y = ny
+          found = true
+          break
+        }
+      }
+    }
+    
+    if (!found) break
+  }
+  
+  if (points.length < 2) return null
+  
+  const length = Math.sqrt(
+    (points[points.length - 1]!.x - points[0]!.x) ** 2 +
+    (points[points.length - 1]!.y - points[0]!.y) ** 2
+  )
+  
+  if (length < minLength) return null
+  
+  return {
+    start: points[0]!,
+    end: points[points.length - 1]!,
+    thickness: 10,
+  }
+}
+
+function filterByDensity(
+  lines: DetectedLine[],
+  mask: Uint8Array,
+  width: number,
+  height: number,
+  minDensity: number
+): DetectedLine[] {
+  return lines.filter(line => {
+    const density = calculateLineDensity(line, mask, width, height)
+    return density >= minDensity
+  })
+}
+
+function calculateLineDensity(
+  line: DetectedLine,
+  mask: Uint8Array,
+  width: number,
+  height: number
+): number {
+  const dx = line.end.x - line.start.x
+  const dy = line.end.y - line.start.y
+  const length = Math.sqrt(dx * dx + dy * dy)
+  
+  if (length === 0) return 0
+  
+  const perpendicularSamples = 10
+  const alongLineSamples = Math.ceil(length / 5)
+  
+  let totalPixels = 0
+  let wallPixels = 0
+  
+  for (let i = 0; i <= alongLineSamples; i++) {
+    const t = i / alongLineSamples
+    const centerX = Math.round(line.start.x + dx * t)
+    const centerY = Math.round(line.start.y + dy * t)
+    
+    const perpX = -dy / length
+    const perpY = dx / length
+    
+    for (let j = -perpendicularSamples; j <= perpendicularSamples; j++) {
+      const sampleX = Math.round(centerX + perpX * j)
+      const sampleY = Math.round(centerY + perpY * j)
+      
+      if (sampleX >= 0 && sampleX < width && sampleY >= 0 && sampleY < height) {
+        totalPixels++
+        if (mask[sampleY * width + sampleX] === 1) {
+          wallPixels++
+        }
+      }
+    }
+  }
+  
+  return totalPixels > 0 ? wallPixels / totalPixels : 0
 }
 
 function filterLines(
@@ -417,78 +332,6 @@ function filterLines(
     
     return isHorizontal || isVertical
   })
-}
-
-function detectFurnitureLines(lines: DetectedLine[], minWallLength: number): DetectedLine[] {
-  const furnitureLines: DetectedLine[] = []
-  
-  const horizontalLines = lines.filter(l => 
-    Math.abs(l.start.y - l.end.y) < 3 && 
-    getLineLength(l) < minWallLength
-  )
-  const verticalLines = lines.filter(l => 
-    Math.abs(l.start.x - l.end.x) < 3 && 
-    getLineLength(l) < minWallLength
-  )
-  
-  const closedRectangles = findClosedRectangles(horizontalLines, verticalLines)
-  
-  for (const rect of closedRectangles) {
-    furnitureLines.push(...rect.lines)
-  }
-  
-  return furnitureLines
-}
-
-function findClosedRectangles(
-  horizontalLines: DetectedLine[],
-  verticalLines: DetectedLine[]
-): { lines: DetectedLine[], width: number, height: number }[] {
-  const rectangles: { lines: DetectedLine[], width: number, height: number }[] = []
-  
-  const hSorted = [...horizontalLines].sort((a, b) => a.start.y - b.start.y)
-  const vSorted = [...verticalLines].sort((a, b) => a.start.x - b.start.x)
-  
-  for (let i = 0; i < hSorted.length; i++) {
-    const topLine = hSorted[i]!
-    
-    for (let j = i + 1; j < hSorted.length; j++) {
-      const bottomLine = hSorted[j]!
-      
-      const yDistance = bottomLine.start.y - topLine.start.y
-      if (yDistance > 300 || yDistance < 20) continue
-      
-      const overlapX = getLineOverlapX(topLine, bottomLine)
-      if (overlapX < 20) continue
-      
-      for (const vLine of vSorted) {
-        const leftMatch = Math.abs(vLine.start.x - topLine.start.x) < 10 &&
-                          Math.abs(vLine.end.x - bottomLine.start.x) < 10 &&
-                          Math.abs(vLine.start.y - topLine.start.y) < 10 &&
-                          Math.abs(vLine.end.y - bottomLine.start.y) < 10
-        
-        if (!leftMatch) continue
-        
-        const rightX = topLine.end.x
-        for (const vLine2 of vSorted) {
-          const rightMatch = Math.abs(vLine2.start.x - rightX) < 10 &&
-                             Math.abs(vLine2.end.x - bottomLine.end.x) < 10 &&
-                             Math.abs(vLine2.start.y - topLine.start.y) < 10 &&
-                             Math.abs(vLine2.end.y - bottomLine.start.y) < 10
-          
-          if (rightMatch && vLine !== vLine2) {
-            rectangles.push({
-              lines: [topLine, bottomLine, vLine, vLine2],
-              width: rightX - topLine.start.x,
-              height: yDistance,
-            })
-          }
-        }
-      }
-    }
-  }
-  
-  return rectangles
 }
 
 function getLineOverlapX(line1: DetectedLine, line2: DetectedLine): number {
@@ -723,22 +566,20 @@ export function createEdgeDebugCanvas(
   ctx.drawImage(image, 0, 0)
   
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-  const grayscale = toGrayscale(imageData)
-  const blurred = applyGaussianBlur(grayscale, canvas.width, canvas.height, opts.gaussianSigma)
-  const edges = applyCannyEdgeDetection(blurred, canvas.width, canvas.height,
-    opts.cannyLowThreshold, opts.cannyHighThreshold)
+  const darkMask = extractDarkPixels(imageData, opts.wallDarkness)
+  const cleanedMask = morphologicalOpening(darkMask, canvas.width, canvas.height, 3)
   
-  const edgeData = new Uint8ClampedArray(edges.length * 4)
-  for (let i = 0; i < edges.length; i++) {
-    const value = edges[i] ?? 0
-    edgeData[i * 4] = value
-    edgeData[i * 4 + 1] = value
-    edgeData[i * 4 + 2] = value
-    edgeData[i * 4 + 3] = 255
+  const maskData = new Uint8ClampedArray(cleanedMask.length * 4)
+  for (let i = 0; i < cleanedMask.length; i++) {
+    const value = (cleanedMask[i] ?? 0) * 255
+    maskData[i * 4] = value
+    maskData[i * 4 + 1] = value
+    maskData[i * 4 + 2] = value
+    maskData[i * 4 + 3] = 255
   }
   
-  const edgeImageData = new ImageData(edgeData, canvas.width, canvas.height)
-  ctx.putImageData(edgeImageData, 0, 0)
+  const maskImageData = new ImageData(maskData, canvas.width, canvas.height)
+  ctx.putImageData(maskImageData, 0, 0)
   
   return canvas
 }
