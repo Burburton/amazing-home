@@ -280,13 +280,16 @@ export class FloorPlanRecognizer {
     }
 
     const wallTiles: boolean[][] = []
+    let wallTileCount = 0
     for (let ty = 0; ty < tilesPerCol; ty++) {
       wallTiles[ty] = []
       for (let tx = 0; tx < tilesPerRow; tx++) {
         const avg = tileAvg[ty]?.[tx] ?? 0
         wallTiles[ty]![tx] = avg > wallThreshold
+        if (avg > wallThreshold) wallTileCount++
       }
     }
+    console.log('wall tiles count:', wallTileCount, 'out of', tilesPerRow * tilesPerCol)
 
     const walls: TFJSRecognitionResult['walls'] = []
 
