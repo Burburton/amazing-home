@@ -185,20 +185,16 @@ export class FloorPlanRecognizer {
 
     let wallProbMax = -Infinity
     let wallProbMin = Infinity
-    let wallProbAboveThreshold = 0
+    let wallProbAbove05 = 0
     let wallProbAbove06 = 0
-    let wallProbAbove07 = 0
-    let wallProbAbove08 = 0
     for (let i = 0; i < wallProb.length; i++) {
       const p = wallProb[i] ?? 0
       if (p > wallProbMax) wallProbMax = p
       if (p < wallProbMin) wallProbMin = p
-      if (p > 0.35) wallProbAboveThreshold++
+      if (p > 0.5) wallProbAbove05++
       if (p > 0.6) wallProbAbove06++
-      if (p > 0.7) wallProbAbove07++
-      if (p > 0.8) wallProbAbove08++
     }
-    console.log('wallProb range:', wallProbMin, '-', wallProbMax, 'pixels >0.35:', wallProbAboveThreshold, '>0.6:', wallProbAbove06, '>0.7:', wallProbAbove07, '>0.8:', wallProbAbove08)
+    console.log('wallProb range:', wallProbMin.toFixed(4), '-', wallProbMax.toFixed(4), 'pixels >0.5:', wallProbAbove05, '>0.6:', wallProbAbove06)
 
     const iconRawData = Array.from(iconTensor.dataSync())
 
@@ -257,54 +253,85 @@ export class FloorPlanRecognizer {
   }
 
   private extractWallsFromProb(wallProb: number[], scaleX: number, scaleY: number): TFJSRecognitionResult['walls'] {
-    const wallThreshold = 0.6
+    const wallThreshold = 0.5
     const width = 512
     const height = 512
+    const tileSize = 16
+    const tilesPerRow = width / tileSize
+    const tilesPerCol = height / tileSize
+
+    const tileAvg: number[][] = []
+    for (let ty = 0; ty < tilesPerCol; ty++) {
+      tileAvg[ty] = []
+      for (let tx = 0; tx < tilesPerRow; tx++) {
+        let sum = 0
+        let count = 0
+        for (let dy = 0; dy < tileSize; dy++) {
+          for (let dx = 0; dx < tileSize; dx++) {
+            const y = ty * tileSize + dy
+            const x = tx * tileSize + dx
+            const idx = y * width + x
+            sum += wallProb[idx] ?? 0
+            count++
+          }
+        }
+        tileAvg[ty]![tx] = sum / count
+      }
+    }
+
+    const wallTiles: boolean[][] = []
+    for (let ty = 0; ty < tilesPerCol; ty++) {
+      wallTiles[ty] = []
+      for (let tx = 0; tx < tilesPerRow; tx++) {
+        const avg = tileAvg[ty]?.[tx] ?? 0
+        wallTiles[ty]![tx] = avg > wallThreshold
+      }
+    }
 
     const walls: TFJSRecognitionResult['walls'] = []
 
-    for (let y = 10; y < height - 10; y++) {
-      let startX = -1
-      for (let x = 10; x < width - 10; x++) {
-        const idx = y * width + x
-        const val = wallProb[idx] ?? 0
-
-        if (val > wallThreshold && startX < 0) {
-          startX = x
-        } else if (val <= wallThreshold && startX >= 0) {
-          const len = x - startX
-          if (len >= 30) {
+    for (let ty = 1; ty < tilesPerCol - 1; ty++) {
+      let startTx = -1
+      for (let tx = 1; tx < tilesPerRow - 1; tx++) {
+        if (wallTiles[ty]?.[tx] && startTx < 0) {
+          startTx = tx
+        } else if (!wallTiles[ty]?.[tx] && startTx >= 0) {
+          const len = tx - startTx
+          if (len >= 2) {
+            const startX = startTx * tileSize * scaleX
+            const endX = tx * tileSize * scaleX
+            const centerY = (ty * tileSize + tileSize / 2) * scaleY
             walls.push({
-              start: { x: Math.round(startX * scaleX), y: Math.round(y * scaleY) },
-              end: { x: Math.round(x * scaleX), y: Math.round(y * scaleY) },
-              thickness: 10,
-              confidence: 0.85
+              start: { x: Math.round(startX), y: Math.round(centerY) },
+              end: { x: Math.round(endX), y: Math.round(centerY) },
+              thickness: Math.round(tileSize * scaleY),
+              confidence: tileAvg[ty]?.[startTx] ?? 0.5
             })
           }
-          startX = -1
+          startTx = -1
         }
       }
     }
 
-    for (let x = 10; x < width - 10; x++) {
-      let startY = -1
-      for (let y = 10; y < height - 10; y++) {
-        const idx = y * width + x
-        const val = wallProb[idx] ?? 0
-
-        if (val > wallThreshold && startY < 0) {
-          startY = y
-        } else if (val <= wallThreshold && startY >= 0) {
-          const len = y - startY
-          if (len >= 30) {
+    for (let tx = 1; tx < tilesPerRow - 1; tx++) {
+      let startTy = -1
+      for (let ty = 1; ty < tilesPerCol - 1; ty++) {
+        if (wallTiles[ty]?.[tx] && startTy < 0) {
+          startTy = ty
+        } else if (!wallTiles[ty]?.[tx] && startTy >= 0) {
+          const len = ty - startTy
+          if (len >= 2) {
+            const startY = startTy * tileSize * scaleY
+            const endY = ty * tileSize * scaleY
+            const centerX = (tx * tileSize + tileSize / 2) * scaleX
             walls.push({
-              start: { x: Math.round(x * scaleX), y: Math.round(startY * scaleY) },
-              end: { x: Math.round(x * scaleX), y: Math.round(y * scaleY) },
-              thickness: 10,
-              confidence: 0.85
+              start: { x: Math.round(centerX), y: Math.round(startY) },
+              end: { x: Math.round(centerX), y: Math.round(endY) },
+              thickness: Math.round(tileSize * scaleX),
+              confidence: tileAvg[startTy]?.[tx] ?? 0.5
             })
           }
-          startY = -1
+          startTy = -1
         }
       }
     }
