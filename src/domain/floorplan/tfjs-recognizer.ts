@@ -259,7 +259,7 @@ export class FloorPlanRecognizer {
     const height = skeleton.length
     const width = skeleton[0]?.length ?? 0
     const visited = new Set<string>()
-    const lines: Array<{
+    const rawLines: Array<{
       start: { x: number; y: number }
       end: { x: number; y: number }
       thickness: number
@@ -355,9 +355,96 @@ export class FloorPlanRecognizer {
       const end = points[points.length - 1]!
       const length = Math.sqrt(Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2))
       
-      if (length < 20) return null
+      if (length < 50) return null
       
       return { start, end, length }
+    }
+
+    // Merge collinear and adjacent lines
+    const mergeLines = (lines: Array<{ start: { x: number; y: number }; end: { x: number; y: number }; thickness: number; confidence: number }>): Array<{ start: { x: number; y: number }; end: { x: number; y: number }; thickness: number; confidence: number }> => {
+      if (lines.length === 0) return lines
+      
+      const angleThreshold = 5 // degrees tolerance for collinearity
+      const distanceThreshold = 15 // max distance between endpoints to merge
+      
+      const getAngle = (line: { start: { x: number; y: number }; end: { x: number; y: number } }): number => {
+        return Math.atan2(line.end.y - line.start.y, line.end.x - line.start.x) * 180 / Math.PI
+      }
+      
+      const getDistance = (p1: { x: number; y: number }, p2: { x: number; y: number }): number => {
+        return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2))
+      }
+      
+      const merged: Array<{ start: { x: number; y: number }; end: { x: number; y: number }; thickness: number; confidence: number }> = []
+      const used = new Set<number>()
+      
+      for (let i = 0; i < lines.length; i++) {
+        if (used.has(i)) continue
+        
+        let currentLine = lines[i]!
+        used.add(i)
+        
+        // Try to merge with other lines
+        for (let j = i + 1; j < lines.length; j++) {
+          if (used.has(j)) continue
+          
+          const otherLine = lines[j]!
+          const angle1 = getAngle(currentLine)
+          const angle2 = getAngle(otherLine)
+          
+          // Check if angles are similar (collinear)
+          const angleDiff = Math.abs(angle1 - angle2)
+          const isCollinear = angleDiff < angleThreshold || angleDiff > 180 - angleThreshold
+          
+          if (!isCollinear) continue
+          
+          // Check if endpoints are close
+          const dist1 = getDistance(currentLine.end, otherLine.start)
+          const dist2 = getDistance(currentLine.start, otherLine.end)
+          const dist3 = getDistance(currentLine.end, otherLine.end)
+          const dist4 = getDistance(currentLine.start, otherLine.start)
+          
+          const minDist = Math.min(dist1, dist2, dist3, dist4)
+          
+          if (minDist < distanceThreshold) {
+            // Merge: take the furthest endpoints
+            const allPoints = [currentLine.start, currentLine.end, otherLine.start, otherLine.end]
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+            
+            for (const p of allPoints) {
+              minX = Math.min(minX, p.x)
+              maxX = Math.max(maxX, p.x)
+              minY = Math.min(minY, p.y)
+              maxY = Math.max(maxY, p.y)
+            }
+            
+            // Choose start/end based on line orientation
+            if (Math.abs(angle1) < 45 || Math.abs(angle1) > 135) {
+              // Vertical-ish line
+              currentLine = {
+                start: { x: (minX + maxX) / 2, y: minY },
+                end: { x: (minX + maxX) / 2, y: maxY },
+                thickness: currentLine.thickness,
+                confidence: Math.max(currentLine.confidence, otherLine.confidence)
+              }
+            } else {
+              // Horizontal-ish line
+              currentLine = {
+                start: { x: minX, y: (minY + maxY) / 2 },
+                end: { x: maxX, y: (minY + maxY) / 2 },
+                thickness: currentLine.thickness,
+                confidence: Math.max(currentLine.confidence, otherLine.confidence)
+              }
+            }
+            
+            used.add(j)
+          }
+        }
+        
+        merged.push(currentLine)
+      }
+      
+      return merged
     }
 
     // Trace from all endpoints
@@ -373,7 +460,7 @@ export class FloorPlanRecognizer {
       const line = simplifyToLine(path.points)
       if (!line) continue
       
-      lines.push({
+      rawLines.push({
         start: line.start,
         end: line.end,
         thickness: 8,
@@ -381,7 +468,10 @@ export class FloorPlanRecognizer {
       })
     }
 
-    return lines
+    // Merge collinear adjacent lines
+    const mergedLines = mergeLines(rawLines)
+    
+    return mergedLines
   }
 
   private extractRooms(roomIconData: number[], scaleX: number, scaleY: number): TFJSRecognitionResult['rooms'] {
