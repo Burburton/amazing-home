@@ -1,0 +1,39 @@
+name: Convert TF.js Model
+
+on:
+  workflow_dispatch:
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      
+      - name: Install dependencies
+        run: |
+          pip install gdown tensorflowjs
+      
+      - name: Download SavedModel
+        run: |
+          mkdir -p model-source
+          gdown "https://drive.google.com/uc?id=1tuqUPbiZnuubPFHMQqCo1_kFNKq4hU8i" -O model-source/savedmodel.zip
+          unzip model-source/savedmodel.zip -d model-source
+      
+      - name: Convert to TensorFlow.js
+        run: |
+          tensorflowjs_converter \
+            --input_format=tf_saved_model \
+            --output_format=tfjs_graph_model \
+            model-source/model/store \
+            public/tfjs-model
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfjs-model
+          path: public/tfjs-model
+          retention-days: 30
