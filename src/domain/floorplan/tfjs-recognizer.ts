@@ -253,7 +253,7 @@ export class FloorPlanRecognizer {
   }
 
   private extractWallsFromProb(wallProb: number[], scaleX: number, scaleY: number): TFJSRecognitionResult['walls'] {
-    const wallThreshold = 0.5
+    const wallThreshold = 0.1
     const width = 512
     const height = 512
     const tileSize = 16
