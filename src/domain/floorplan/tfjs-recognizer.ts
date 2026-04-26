@@ -179,11 +179,11 @@ export class FloorPlanRecognizer {
   }
 
   private extractWalls(wallData: number[], scaleX: number, scaleY: number): TFJSRecognitionResult['walls'] {
-    const wallThreshold = 0.5
+    const wallThreshold = 0.4
     const width = 512
     const height = 512
     const minWallLength = 50
-    const maxWallLength = 300
+    const maxWallLength = 200
     
     const lines: Array<{
       start: { x: number; y: number }
