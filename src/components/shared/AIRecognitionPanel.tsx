@@ -36,7 +36,7 @@ function AIRecognitionPanel() {
     try {
       await localRecognizer.loadModel()
       setTfjsLoaded(true)
-    } catch (err) {
+    } catch {
       setError('Failed to load TF.js model')
     }
   }
