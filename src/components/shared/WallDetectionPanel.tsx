@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useFloorPlanStore } from '@store/useFloorPlanStore'
-import { detectWallsFromImage, createDetectionDebugCanvas } from '@domain/floorplan/wall-detection'
+import { detectWallsFromImage, createDetectionDebugCanvas, createEdgeDebugCanvas } from '@domain/floorplan/wall-detection'
 import { Wall } from '@domain/floorplan/types'
 
 interface CandidateWall extends Wall {
@@ -12,8 +12,16 @@ interface CandidateWall extends Wall {
 function WallDetectionPanel() {
   const [isDetecting, setIsDetecting] = useState(false)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-  const [threshold, setThreshold] = useState(100)
-  const [minLength, setMinLength] = useState(20)
+  const [edgePreviewUrl, setEdgePreviewUrl] = useState<string | null>(null)
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  
+  const [minLineLength, setMinLineLength] = useState(50)
+  const [angleTolerance, setAngleTolerance] = useState(5)
+  const [cannyLow, setCannyLow] = useState(50)
+  const [cannyHigh, setCannyHigh] = useState(150)
+  const [houghThreshold, setHoughThreshold] = useState(100)
+  const [maxLineGap, setMaxLineGap] = useState(10)
+  
   const [candidateWalls, setCandidateWalls] = useState<CandidateWall[]>([])
   
   const { document, addWall } = useFloorPlanStore()
@@ -34,7 +42,17 @@ function WallDetectionPanel() {
         img.onerror = () => resolve()
       })
       
-      const walls = detectWallsFromImage(img, { threshold, minLength })
+      const options = {
+        cannyLowThreshold: cannyLow,
+        cannyHighThreshold: cannyHigh,
+        houghThreshold,
+        minLineLength,
+        maxLineGap,
+        angleTolerance,
+        minLength: minLineLength,
+      }
+      
+      const walls = detectWallsFromImage(img, options)
       
       const candidates: CandidateWall[] = walls.map((wall, index) => ({
         ...wall,
@@ -48,6 +66,9 @@ function WallDetectionPanel() {
       
       const debugCanvas = createDetectionDebugCanvas(img, walls)
       setPreviewUrl(debugCanvas.toDataURL())
+      
+      const edgeCanvas = createEdgeDebugCanvas(img, options)
+      setEdgePreviewUrl(edgeCanvas.toDataURL())
     } finally {
       setIsDetecting(false)
     }
@@ -80,10 +101,12 @@ function WallDetectionPanel() {
     })
     setCandidateWalls([])
     setPreviewUrl(null)
+    setEdgePreviewUrl(null)
   }
   
   const handleClearPreview = () => {
     setPreviewUrl(null)
+    setEdgePreviewUrl(null)
     setCandidateWalls([])
   }
   
@@ -108,12 +131,12 @@ function WallDetectionPanel() {
   return (
     <div className="p-4 space-y-3">
       <div className="text-xs font-medium text-gray-600">
-        Wall Detection (Experimental)
+        Wall Detection (Canny + Hough)
       </div>
       
       <div className="text-xs text-gray-400">
-        Automatically detect walls from uploaded floor plan image. 
-        Works best on clean floor plans with dark wall lines.
+        Industry-standard edge detection using Canny + Hough transform.
+        Works on floor plans with walls at any angle.
       </div>
       
       {!hasImage && (
@@ -126,34 +149,111 @@ function WallDetectionPanel() {
         <div className="space-y-2">
           <div>
             <label className="block text-xs text-gray-500 mb-1">
-              Brightness Threshold ({threshold})
+              Min Line Length ({minLineLength}px)
             </label>
             <input
               type="range"
-              min={50}
+              min={20}
               max={200}
-              value={threshold}
-              onChange={(e) => setThreshold(parseInt(e.target.value))}
+              value={minLineLength}
+              onChange={(e) => setMinLineLength(parseInt(e.target.value))}
               className="w-full"
             />
             <div className="text-xs text-gray-400">
-              Lower = more walls detected (including noise)
+              Higher = fewer, longer walls only
             </div>
           </div>
           
           <div>
             <label className="block text-xs text-gray-500 mb-1">
-              Minimum Line Length ({minLength}px)
+              Angle Tolerance ({angleTolerance}°)
             </label>
             <input
               type="range"
-              min={10}
-              max={100}
-              value={minLength}
-              onChange={(e) => setMinLength(parseInt(e.target.value))}
+              min={1}
+              max={15}
+              value={angleTolerance}
+              onChange={(e) => setAngleTolerance(parseInt(e.target.value))}
               className="w-full"
             />
+            <div className="text-xs text-gray-400">
+              Higher = allow more diagonal walls
+            </div>
           </div>
+          
+          <button
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            className="text-xs text-gray-500 hover:text-gray-700"
+          >
+            {showAdvanced ? 'Hide Advanced' : 'Show Advanced Settings'}
+          </button>
+          
+          {showAdvanced && (
+            <div className="space-y-2 p-2 bg-gray-50 rounded border border-gray-200">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">
+                  Canny Low ({cannyLow})
+                </label>
+                <input
+                  type="range"
+                  min={10}
+                  max={100}
+                  value={cannyLow}
+                  onChange={(e) => setCannyLow(parseInt(e.target.value))}
+                  className="w-full"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">
+                  Canny High ({cannyHigh})
+                </label>
+                <input
+                  type="range"
+                  min={50}
+                  max={200}
+                  value={cannyHigh}
+                  onChange={(e) => setCannyHigh(parseInt(e.target.value))}
+                  className="w-full"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">
+                  Hough Threshold ({houghThreshold})
+                </label>
+                <input
+                  type="range"
+                  min={20}
+                  max={300}
+                  value={houghThreshold}
+                  onChange={(e) => setHoughThreshold(parseInt(e.target.value))}
+                  className="w-full"
+                />
+                <div className="text-xs text-gray-400">
+                  Higher = fewer, more prominent lines
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">
+                  Max Line Gap ({maxLineGap}px)
+                </label>
+                <input
+                  type="range"
+                  min={5}
+                  max={30}
+                  value={maxLineGap}
+                  onChange={(e) => setMaxLineGap(parseInt(e.target.value))}
+                  className="w-full"
+                />
+                <div className="text-xs text-gray-400">
+                  Connects gaps within this distance
+                </div>
+              </div>
+            </div>
+          )
+          }
           
           <button
             onClick={handleDetect}
@@ -164,13 +264,23 @@ function WallDetectionPanel() {
           </button>
           
           {previewUrl && (
-            <div className="mt-3">
-              <div className="text-xs text-gray-500 mb-1">Preview (red = detected walls)</div>
-              <img 
-                src={previewUrl} 
-                alt="Detection preview" 
-                className="w-full border border-gray-200 rounded"
-              />
+            <div className="mt-3 space-y-2">
+              <div>
+                <div className="text-xs text-gray-500 mb-1">Edge Detection Preview</div>
+                <img 
+                  src={edgePreviewUrl ?? ''} 
+                  alt="Edge detection preview" 
+                  className="w-full border border-gray-200 rounded"
+                />
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 mb-1">Wall Detection (red = detected walls)</div>
+                <img 
+                  src={previewUrl} 
+                  alt="Detection preview" 
+                  className="w-full border border-gray-200 rounded"
+                />
+              </div>
             </div>
           )}
           
@@ -271,8 +381,8 @@ function WallDetectionPanel() {
       )}
       
       <div className="text-xs text-gray-400 border-t border-gray-200 pt-2 mt-2">
-        Note: This is a spike feature. Only detects horizontal/vertical lines.
-        Manual adjustment may be needed after detection.
+        Using Canny edge detection + Hough transform. Detects walls at any angle.
+        Adjust parameters if detection is too sensitive or missing walls.
       </div>
     </div>
   )
