@@ -251,66 +251,55 @@ export class FloorPlanRecognizer {
   }
 
   private extractWallsFromProb(wallProb: number[], scaleX: number, scaleY: number): TFJSRecognitionResult['walls'] {
-    const wallThreshold = 0.3
+    const wallThreshold = 0.6
     const width = 512
     const height = 512
 
-    const wallMask: boolean[][] = []
-    for (let y = 0; y < height; y++) {
-      wallMask[y] = []
-      for (let x = 0; x < width; x++) {
-        const idx = y * width + x
-        wallMask[y]![x] = (wallProb[idx] ?? 0) > wallThreshold
-      }
-    }
-
-    const dilatedMask: boolean[][] = []
-    for (let y = 0; y < height; y++) {
-      dilatedMask[y] = []
-      for (let x = 0; x < width; x++) {
-        let dilated = wallMask[y]?.[x] ?? false
-        for (let dy = -2; dy <= 2; dy++) {
-          for (let dx = -2; dx <= 2; dx++) {
-            if (wallMask[y + dy]?.[x + dx]) dilated = true
-          }
-        }
-        dilatedMask[y]![x] = dilated
-      }
-    }
-
-    const components = this.findConnectedComponents(dilatedMask)
-    console.log('wall components after dilation:', components.length, 'largest:', components.length > 0 ? components[0]?.pixels.length : 0)
-
     const walls: TFJSRecognitionResult['walls'] = []
-    const minWallArea = 50
 
-    for (const component of components) {
-      if (component.pixels.length < minWallArea) continue
+    for (let y = 10; y < height - 10; y++) {
+      let startX = -1
+      for (let x = 10; x < width - 10; x++) {
+        const idx = y * width + x
+        const val = wallProb[idx] ?? 0
 
-      const xs = component.pixels.map(p => p.x)
-      const ys = component.pixels.map(p => p.y)
-      const minX = Math.min(...xs)
-      const maxX = Math.max(...xs)
-      const minY = Math.min(...ys)
-      const maxY = Math.max(...ys)
+        if (val > wallThreshold && startX < 0) {
+          startX = x
+        } else if (val <= wallThreshold && startX >= 0) {
+          const len = x - startX
+          if (len >= 30) {
+            walls.push({
+              start: { x: Math.round(startX * scaleX), y: Math.round(y * scaleY) },
+              end: { x: Math.round(x * scaleX), y: Math.round(y * scaleY) },
+              thickness: 10,
+              confidence: 0.85
+            })
+          }
+          startX = -1
+        }
+      }
+    }
 
-      const w = maxX - minX + 1
-      const h = maxY - minY + 1
+    for (let x = 10; x < width - 10; x++) {
+      let startY = -1
+      for (let y = 10; y < height - 10; y++) {
+        const idx = y * width + x
+        const val = wallProb[idx] ?? 0
 
-      if (w > h * 2) {
-        walls.push({
-          start: { x: Math.round(minX * scaleX), y: Math.round((minY + maxY) / 2 * scaleY) },
-          end: { x: Math.round(maxX * scaleX), y: Math.round((minY + maxY) / 2 * scaleY) },
-          thickness: Math.round(h * scaleY),
-          confidence: 0.85
-        })
-      } else if (h > w * 2) {
-        walls.push({
-          start: { x: Math.round((minX + maxX) / 2 * scaleX), y: Math.round(minY * scaleY) },
-          end: { x: Math.round((minX + maxX) / 2 * scaleX), y: Math.round(maxY * scaleY) },
-          thickness: Math.round(w * scaleX),
-          confidence: 0.85
-        })
+        if (val > wallThreshold && startY < 0) {
+          startY = y
+        } else if (val <= wallThreshold && startY >= 0) {
+          const len = y - startY
+          if (len >= 30) {
+            walls.push({
+              start: { x: Math.round(x * scaleX), y: Math.round(startY * scaleY) },
+              end: { x: Math.round(x * scaleX), y: Math.round(y * scaleY) },
+              thickness: 10,
+              confidence: 0.85
+            })
+          }
+          startY = -1
+        }
       }
     }
 
