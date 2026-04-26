@@ -114,7 +114,7 @@ export class FloorPlanRecognizer {
       return this.fallbackPredict(imageData)
     }
 
-    const result = this.postprocessPrediction(pred0, pred1, imageData.width, imageData.height)
+    const result = this.postprocessPrediction(pred1, pred0, imageData.width, imageData.height)
 
     batchTensor.dispose()
     tensor.dispose()
