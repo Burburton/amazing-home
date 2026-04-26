@@ -74,10 +74,26 @@ function AIRecognitionPanel() {
         const img = new window.Image()
         img.src = document.sourceImage!.objectUrl
         
-        await new Promise<void>((resolve) => {
-          img.onload = () => resolve()
-          img.onerror = () => resolve()
+        let imgLoaded = false
+        await new Promise<void>((resolve, reject) => {
+          img.onload = () => {
+            imgLoaded = true
+            resolve()
+          }
+          img.onerror = () => {
+            reject(new Error('Failed to load image for recognition'))
+          }
+          // Timeout after 10s
+          setTimeout(() => {
+            if (!imgLoaded) {
+              reject(new Error('Image load timeout'))
+            }
+          }, 10000)
         })
+        
+        if (!imgLoaded || img.width === 0) {
+          throw new Error('Image not loaded properly')
+        }
         
         const canvas = window.document.createElement('canvas')
         canvas.width = img.width || 512
