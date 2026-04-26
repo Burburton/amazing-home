@@ -8,12 +8,15 @@ function Header() {
   const { document, loadDocument, saveToJson, loadFromJson, createNewProject, setError, error, undo, redo, canUndo, canRedo } = useFloorPlanStore()
   const [editingName, setEditingName] = useState(false)
   const [tempName, setTempName] = useState(document.project.name)
+  const [saveMessage, setSaveMessage] = useState<string | null>(null)
   
   const handleSaveToStorage = React.useCallback(() => {
     try {
       const json = saveToJson()
       localStorage.setItem(STORAGE_KEY, json)
       setError(null)
+      setSaveMessage('Saved!')
+      setTimeout(() => setSaveMessage(null), 2000)
     } catch {
       setError('Failed to save to browser')
     }
@@ -147,6 +150,12 @@ function Header() {
       </div>
       
       <div className="flex items-center gap-2">
+        {saveMessage && (
+          <span className="text-xs text-green-200 bg-green-700/50 px-2 py-1 rounded animate-pulse">
+            {saveMessage}
+          </span>
+        )}
+        
         {error && (
           <span className="text-xs text-red-300 bg-red-900/50 px-2 py-1 rounded">
             {error}
