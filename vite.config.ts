@@ -26,5 +26,14 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'tensorflow': ['@tensorflow/tfjs'],
+          'three': ['three'],
+          'konva': ['konva', 'react-konva'],
+        },
+      },
+    },
   },
 })
