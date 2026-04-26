@@ -21,7 +21,8 @@ export interface TFJSRecognitionResult {
 }
 
 // Local TF.js model from TF2DeepFloorplan conversion
-const MODEL_URL = '/tfjs-model/model.json'
+// Use relative path for GitHub Pages compatibility
+const MODEL_URL = './tfjs-model/model.json'
 
 const ICON_TYPES = [
   'door', 'window', 'bed', 'table', 'sofa', 'chair',
