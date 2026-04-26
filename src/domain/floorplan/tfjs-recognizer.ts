@@ -183,9 +183,15 @@ export class FloorPlanRecognizer {
 
     const wallProb = this.extractWallChannelProbability(roomTypeChannelData)
 
-    const wallProbMax = Math.max(...wallProb)
-    const wallProbMin = Math.min(...wallProb)
-    const wallProbAboveThreshold = wallProb.filter(p => p > 0.35).length
+    let wallProbMax = -Infinity
+    let wallProbMin = Infinity
+    let wallProbAboveThreshold = 0
+    for (let i = 0; i < wallProb.length; i++) {
+      const p = wallProb[i] ?? 0
+      if (p > wallProbMax) wallProbMax = p
+      if (p < wallProbMin) wallProbMin = p
+      if (p > 0.35) wallProbAboveThreshold++
+    }
     console.log('wallProb range:', wallProbMin, '-', wallProbMax, 'pixels above 0.35:', wallProbAboveThreshold)
 
     const iconRawData = Array.from(iconTensor.dataSync())
@@ -216,16 +222,24 @@ export class FloorPlanRecognizer {
     const size = channelData[0]?.length ?? 0
     const result: number[] = []
 
-    // Apply softmax per pixel across all room type channels
     for (let i = 0; i < size; i++) {
-      const values = channelData.map(c => c[i] ?? 0)
-      const maxVal = Math.max(...values)
-      const expValues = values.map(v => Math.exp(v - maxVal))
-      const sumExp = expValues.reduce((a, b) => a + b, 0)
+      let maxVal = -Infinity
+      for (let c = 0; c < numChannels; c++) {
+        const val = channelData[c]?.[i] ?? 0
+        if (val > maxVal) maxVal = val
+      }
 
-      // Get probability for channel 2 (wall class in ROOM_TYPES)
+      let sumExp = 0
+      const expValues: number[] = []
+      for (let c = 0; c < numChannels; c++) {
+        const val = channelData[c]?.[i] ?? 0
+        const expVal = Math.exp(val - maxVal)
+        expValues.push(expVal)
+        sumExp += expVal
+      }
+
       const wallChannelIdx = 2
-      if (wallChannelIdx < numChannels) {
+      if (wallChannelIdx < numChannels && sumExp > 0) {
         const wallProb = expValues[wallChannelIdx]! / sumExp
         result.push(wallProb)
       } else {
