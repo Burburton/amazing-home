@@ -20,10 +20,13 @@ export interface TFJSRecognitionResult {
   confidence: number
 }
 
-// No publicly hosted TF.js floor plan model exists.
-// User must convert from SavedModel and host themselves.
-// See docs/deployment/tfjs-model-setup.md for conversion instructions.
-const MODEL_URL = '' // Placeholder - requires user-provided model
+// Local TF.js model from TF2DeepFloorplan conversion
+const MODEL_URL = '/tfjs-model/model.json'
+
+const ICON_TYPES = [
+  'door', 'window', 'bed', 'table', 'sofa', 'chair',
+  'refrigerator', 'sink', 'toilet', 'bathtub'
+]
 
 export class FloorPlanRecognizer {
   private model: tf.GraphModel | null = null
@@ -32,20 +35,15 @@ export class FloorPlanRecognizer {
   async loadModel(): Promise<void> {
     if (this.loaded) return
 
-    if (MODEL_URL) {
-      try {
-        console.log('Loading TF.js floor plan model...')
-        this.model = await tf.loadGraphModel(MODEL_URL)
-        this.loaded = true
-        console.log('Model loaded successfully')
-        return
-      } catch (error) {
-        console.error('Model load failed, using fallback:', error)
-      }
+    try {
+      console.log('Loading TF.js floor plan model from:', MODEL_URL)
+      this.model = await tf.loadGraphModel(MODEL_URL)
+      this.loaded = true
+      console.log('Model loaded successfully')
+    } catch (error) {
+      console.error('Model load failed, using fallback:', error)
+      this.loaded = true
     }
-
-    console.log('Using fallback pixel brightness detection (no TF.js model available)')
-    this.loaded = true
   }
 
   async predict(imageData: ImageData): Promise<TFJSRecognitionResult> {
@@ -54,13 +52,30 @@ export class FloorPlanRecognizer {
     }
 
     const tensor = this.preprocessImage(imageData)
+    const batchTensor = tensor.expandDims(0)
 
-    const prediction = await this.model.predict(tensor) as tf.Tensor
+    const predictions = await this.model.predict(batchTensor) as tf.Tensor[]
 
-    const result = this.postprocessPrediction(prediction, imageData.width, imageData.height)
+    if (!predictions || predictions.length < 2) {
+      batchTensor.dispose()
+      tensor.dispose()
+      return this.fallbackPredict(imageData)
+    }
 
+    const pred0 = predictions[0]
+    const pred1 = predictions[1]
+    if (!pred0 || !pred1) {
+      batchTensor.dispose()
+      tensor.dispose()
+      predictions.forEach(p => p?.dispose())
+      return this.fallbackPredict(imageData)
+    }
+
+    const result = this.postprocessPrediction(pred0, pred1, imageData.width, imageData.height)
+
+    batchTensor.dispose()
     tensor.dispose()
-    prediction.dispose()
+    predictions.forEach(p => p.dispose())
 
     return result
   }
@@ -88,36 +103,72 @@ export class FloorPlanRecognizer {
   }
 
   private postprocessPrediction(
-    prediction: tf.Tensor,
+    roomIconMask: tf.Tensor,
+    wallMask: tf.Tensor,
     width: number,
     height: number
   ): TFJSRecognitionResult {
-    const data = Array.from(prediction.dataSync())
     const walls: TFJSRecognitionResult['walls'] = []
     const rooms: TFJSRecognitionResult['rooms'] = []
     const icons: TFJSRecognitionResult['icons'] = []
 
-    const wallThreshold = 0.5
-    for (let y = 0; y < height; y += 10) {
-      for (let x = 0; x < width; x += 10) {
-        const idx = y * width + x
-        const value = data[idx] ?? 0
-        if (value > wallThreshold) {
+    const roomIconData = Array.from(roomIconMask.dataSync())
+    const wallData = Array.from(wallMask.dataSync())
+
+    const scale_x = width / 512
+    const scale_y = height / 512
+
+    const wallThreshold = 0.3
+    for (let y = 0; y < 512; y += 4) {
+      for (let x = 0; x < 512; x += 4) {
+        const idx = y * 512 + x
+        const wallValue = wallData[idx] ?? 0
+
+        if (wallValue > wallThreshold) {
           walls.push({
-            start: { x, y },
-            end: { x: x + 10, y },
-            thickness: 5,
-            confidence: value
+            start: { x: Math.round(x * scale_x), y: Math.round(y * scale_y) },
+            end: { x: Math.round((x + 4) * scale_x), y: Math.round((y + 4) * scale_y) },
+            thickness: Math.round(4 * Math.max(scale_x, scale_y)),
+            confidence: wallValue
           })
         }
       }
     }
 
+    const iconChannels = 9
+    for (let c = 0; c < iconChannels; c++) {
+      for (let y = 0; y < 512; y += 8) {
+        for (let x = 0; x < 512; x += 8) {
+          const idx = c * 512 * 512 + y * 512 + x
+          const iconValue = roomIconData[idx] ?? 0
+
+          if (iconValue > 0.5) {
+            const iconType = ICON_TYPES[c] ?? 'unknown'
+
+            icons.push({
+              bbox: {
+                x: Math.round(x * scale_x),
+                y: Math.round(y * scale_y),
+                width: Math.round(8 * scale_x),
+                height: Math.round(8 * scale_y)
+              },
+              type: iconType,
+              confidence: iconValue
+            })
+          }
+        }
+      }
+    }
+
+    const overallConfidence = walls.length > 0
+      ? walls.reduce((sum, w) => sum + w.confidence, 0) / walls.length
+      : 0.5
+
     return {
       walls,
       rooms,
       icons,
-      confidence: 0.75
+      confidence: overallConfidence
     }
   }
 
