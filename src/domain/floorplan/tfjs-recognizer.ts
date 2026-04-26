@@ -86,24 +86,29 @@ export class FloorPlanRecognizer {
 
   private preprocessImage(imageData: ImageData): tf.Tensor3D {
     const { data, width, height } = imageData
-    const safeWidth = Math.max(1, width)
-    const safeHeight = Math.max(1, height)
+    const targetSize = 512
 
-    const rgbData = new Float32Array(safeWidth * safeHeight * 3)
     const pixelData = new Uint8Array(data)
+    const rgbData = new Float32Array(width * height * 3)
 
-    for (let i = 0; i < safeWidth * safeHeight; i++) {
+    for (let i = 0; i < width * height; i++) {
       const pixelIdx = i * 4
       const r = pixelData[pixelIdx] ?? 0
       const g = pixelData[pixelIdx + 1] ?? 0
       const b = pixelData[pixelIdx + 2] ?? 0
 
-      rgbData[i * 3] = (r / 255 - 0.485) / 0.229
-      rgbData[i * 3 + 1] = (g / 255 - 0.456) / 0.224
-      rgbData[i * 3 + 2] = (b / 255 - 0.406) / 0.225
+      rgbData[i * 3] = r / 255
+      rgbData[i * 3 + 1] = g / 255
+      rgbData[i * 3 + 2] = b / 255
     }
 
-    return tf.tensor3d(rgbData, [safeHeight, safeWidth, 3])
+    let tensor = tf.tensor3d(rgbData, [height, width, 3])
+
+    if (width !== targetSize || height !== targetSize) {
+      tensor = tf.image.resizeBilinear(tensor, [targetSize, targetSize])
+    }
+
+    return tensor
   }
 
   private postprocessPrediction(
