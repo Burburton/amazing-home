@@ -180,19 +180,79 @@ export class FloorPlanRecognizer {
 
   private extractWalls(wallData: number[], scaleX: number, scaleY: number): TFJSRecognitionResult['walls'] {
     const wallThreshold = 0.35
-    const binaryMask: boolean[][] = []
-    for (let y = 0; y < 512; y++) {
-      binaryMask[y] = []
-      for (let x = 0; x < 512; x++) {
-        const idx = y * 512 + x
-        binaryMask[y]![x] = (wallData[idx] ?? 0) > wallThreshold
+    const width = 512
+    const height = 512
+    
+    const lines: Array<{
+      start: { x: number; y: number }
+      end: { x: number; y: number }
+      thickness: number
+      confidence: number
+    }> = []
+    
+    for (let y = 10; y < height - 10; y += 2) {
+      let startX = -1
+      for (let x = 10; x < width - 10; x++) {
+        const idx = y * width + x
+        const val = wallData[idx] ?? 0
+        
+        if (val > wallThreshold && startX < 0) {
+          startX = x
+        } else if (val <= wallThreshold && startX >= 0) {
+          if (x - startX >= 30) {
+            lines.push({
+              start: { x: startX, y },
+              end: { x: x - 1, y },
+              thickness: 10,
+              confidence: 0.8
+            })
+          }
+          startX = -1
+        }
+      }
+      if (startX >= 0 && width - startX >= 30) {
+        lines.push({
+          start: { x: startX, y },
+          end: { x: width - 1, y },
+          thickness: 10,
+          confidence: 0.8
+        })
       }
     }
-
-    const skeleton = this.skeletonize(binaryMask)
-    const lines = this.detectLinesFromSkeleton(skeleton)
-
-    return lines.map(line => ({
+    
+    for (let x = 10; x < width - 10; x += 2) {
+      let startY = -1
+      for (let y = 10; y < height - 10; y++) {
+        const idx = y * width + x
+        const val = wallData[idx] ?? 0
+        
+        if (val > wallThreshold && startY < 0) {
+          startY = y
+        } else if (val <= wallThreshold && startY >= 0) {
+          if (y - startY >= 30) {
+            lines.push({
+              start: { x, y: startY },
+              end: { x, y: y - 1 },
+              thickness: 10,
+              confidence: 0.8
+            })
+          }
+          startY = -1
+        }
+      }
+      if (startY >= 0 && height - startY >= 30) {
+        lines.push({
+          start: { x, y: startY },
+          end: { x, y: height - 1 },
+          thickness: 10,
+          confidence: 0.8
+        })
+      }
+    }
+    
+    const merged = this.mergeWallLines(lines)
+    
+    return merged.map(line => ({
       start: { x: Math.round(line.start.x * scaleX), y: Math.round(line.start.y * scaleY) },
       end: { x: Math.round(line.end.x * scaleX), y: Math.round(line.end.y * scaleY) },
       thickness: Math.round(line.thickness * Math.max(scaleX, scaleY)),
@@ -200,278 +260,74 @@ export class FloorPlanRecognizer {
     }))
   }
 
-  private skeletonize(mask: boolean[][]): boolean[][] {
-    const height = mask.length
-    const width = mask[0]?.length ?? 0
-    const skeleton: boolean[][] = mask.map(row => [...row])
-
-    const erode = (m: boolean[][]) => {
-      const result: boolean[][] = []
-      for (let y = 0; y < height; y++) {
-        result[y] = []
-        for (let x = 0; x < width; x++) {
-          if (!m[y]?.[x]) {
-            result[y]![x] = false
-            continue
-          }
-          const neighbors = this.countNeighbors(m, x, y)
-          result[y]![x] = neighbors >= 2
-        }
-      }
-      return result
-    }
-
-    for (let iter = 0; iter < 3; iter++) {
-      const eroded = erode(skeleton)
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          if (skeleton[y]?.[x] && !eroded[y]?.[x]) {
-            skeleton[y]![x] = this.countNeighbors(skeleton, x, y) >= 2
-          }
-        }
-      }
-    }
-
-    return skeleton
-  }
-
-  private countNeighbors(mask: boolean[][], x: number, y: number): number {
-    let count = 0
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        if (dx === 0 && dy === 0) continue
-        const ny = y + dy
-        const nx = x + dx
-        if (ny >= 0 && ny < mask.length && nx >= 0 && nx < (mask[0]?.length ?? 0)) {
-          if (mask[ny]?.[nx]) count++
-        }
-      }
-    }
-    return count
-  }
-
-  private detectLinesFromSkeleton(skeleton: boolean[][]): Array<{
+  private mergeWallLines(lines: Array<{
+    start: { x: number; y: number }
+    end: { x: number; y: number }
+    thickness: number
+    confidence: number
+  }>): Array<{
     start: { x: number; y: number }
     end: { x: number; y: number }
     thickness: number
     confidence: number
   }> {
-    const height = skeleton.length
-    const width = skeleton[0]?.length ?? 0
-    const visited = new Set<string>()
-    const rawLines: Array<{
+    if (lines.length === 0) return lines
+    
+    const result: Array<{
       start: { x: number; y: number }
       end: { x: number; y: number }
       thickness: number
       confidence: number
     }> = []
-
-    // Find all endpoints (pixels with exactly 1 neighbor)
-    const findEndpoints = (): Array<{ x: number; y: number }> => {
-      const endpoints: Array<{ x: number; y: number }> = []
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          if (skeleton[y]?.[x] && this.countNeighbors(skeleton, x, y) === 1) {
-            endpoints.push({ x, y })
-          }
-        }
-      }
-      return endpoints
-    }
-
-    // Trace path from a starting point, following the skeleton
-    const tracePath = (startX: number, startY: number): { points: Array<{ x: number; y: number }>; endX: number; endY: number } | null => {
-      const points: Array<{ x: number; y: number }> = []
-      let x = startX
-      let y = startY
-      let prevX = startX
-      let prevY = startY
-      
-      while (true) {
-        const key = `${x},${y}`
-        if (visited.has(key)) break
-        
-        visited.add(key)
-        points.push({ x, y })
-        
-        // Find next pixel on skeleton (exclude previous position)
-        const neighbors = getOrderedNeighbors(skeleton, x, y, prevX, prevY)
-        
-        if (neighbors.length === 0) {
-          // End of path (endpoint or branch)
-          break
-        }
-        
-        // Follow the direction with most continuity
-        const next = neighbors[0]
-        if (!next) break
-        prevX = x
-        prevY = y
-        x = next.x
-        y = next.y
-        
-        // Limit path length to prevent infinite loops
-        if (points.length > 500) break
-      }
-      
-      if (points.length < 2) return null
-      
-      const lastPoint = points[points.length - 1]!
-      return { points, endX: lastPoint.x, endY: lastPoint.y }
-    }
-
-    // Get ordered neighbors (prioritize direction continuity)
-    const getOrderedNeighbors = (mask: boolean[][], x: number, y: number, prevX: number, prevY: number): Array<{ x: number; y: number }> => {
-      const neighbors: Array<{ x: number; y: number; priority: number }> = []
-      const dx = x - prevX
-      const dy = y - prevY
-      
-      for (let ndy = -1; ndy <= 1; ndy++) {
-        for (let ndx = -1; ndx <= 1; ndx++) {
-          if (ndx === 0 && ndy === 0) continue
-          const nx = x + ndx
-          const ny = y + ndy
-          if (ny >= 0 && ny < height && nx >= 0 && nx < width && mask[ny]?.[nx]) {
-            const key = `${nx},${ny}`
-            if (visited.has(key)) continue
-            
-            // Calculate direction continuity (dot product)
-            const priority = dx * ndx + dy * ndy
-            neighbors.push({ x: nx, y: ny, priority })
-          }
-        }
-      }
-      
-      // Sort by priority (prefer same direction)
-      neighbors.sort((a, b) => b.priority - a.priority)
-      return neighbors.map(n => ({ x: n.x, y: n.y }))
-    }
-
-    // Simplify path to line segment (find start and end points)
-    const simplifyToLine = (points: Array<{ x: number; y: number }>): { start: { x: number; y: number }; end: { x: number; y: number }; length: number } | null => {
-      if (points.length < 10) return null
-      
-      const start = points[0]!
-      const end = points[points.length - 1]!
-      const length = Math.sqrt(Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2))
-      
-      if (length < 50) return null
-      
-      return { start, end, length }
-    }
-
-    // Merge collinear and adjacent lines
-    const mergeLines = (lines: Array<{ start: { x: number; y: number }; end: { x: number; y: number }; thickness: number; confidence: number }>): Array<{ start: { x: number; y: number }; end: { x: number; y: number }; thickness: number; confidence: number }> => {
-      if (lines.length === 0) return lines
-      
-      const angleThreshold = 5 // degrees tolerance for collinearity
-      const distanceThreshold = 15 // max distance between endpoints to merge
-      
-      const getAngle = (line: { start: { x: number; y: number }; end: { x: number; y: number } }): number => {
-        return Math.atan2(line.end.y - line.start.y, line.end.x - line.start.x) * 180 / Math.PI
-      }
-      
-      const getDistance = (p1: { x: number; y: number }, p2: { x: number; y: number }): number => {
-        return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2))
-      }
-      
-      const merged: Array<{ start: { x: number; y: number }; end: { x: number; y: number }; thickness: number; confidence: number }> = []
-      const used = new Set<number>()
-      
-      for (let i = 0; i < lines.length; i++) {
-        if (used.has(i)) continue
-        
-        let currentLine = lines[i]!
-        used.add(i)
-        
-        // Try to merge with other lines
-        for (let j = i + 1; j < lines.length; j++) {
-          if (used.has(j)) continue
-          
-          const otherLine = lines[j]!
-          const angle1 = getAngle(currentLine)
-          const angle2 = getAngle(otherLine)
-          
-          // Check if angles are similar (collinear)
-          const angleDiff = Math.abs(angle1 - angle2)
-          const isCollinear = angleDiff < angleThreshold || angleDiff > 180 - angleThreshold
-          
-          if (!isCollinear) continue
-          
-          // Check if endpoints are close
-          const dist1 = getDistance(currentLine.end, otherLine.start)
-          const dist2 = getDistance(currentLine.start, otherLine.end)
-          const dist3 = getDistance(currentLine.end, otherLine.end)
-          const dist4 = getDistance(currentLine.start, otherLine.start)
-          
-          const minDist = Math.min(dist1, dist2, dist3, dist4)
-          
-          if (minDist < distanceThreshold) {
-            // Merge: take the furthest endpoints
-            const allPoints = [currentLine.start, currentLine.end, otherLine.start, otherLine.end]
-            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
-            
-            for (const p of allPoints) {
-              minX = Math.min(minX, p.x)
-              maxX = Math.max(maxX, p.x)
-              minY = Math.min(minY, p.y)
-              maxY = Math.max(maxY, p.y)
-            }
-            
-            // Choose start/end based on line orientation
-            if (Math.abs(angle1) < 45 || Math.abs(angle1) > 135) {
-              // Vertical-ish line
-              currentLine = {
-                start: { x: (minX + maxX) / 2, y: minY },
-                end: { x: (minX + maxX) / 2, y: maxY },
-                thickness: currentLine.thickness,
-                confidence: Math.max(currentLine.confidence, otherLine.confidence)
-              }
-            } else {
-              // Horizontal-ish line
-              currentLine = {
-                start: { x: minX, y: (minY + maxY) / 2 },
-                end: { x: maxX, y: (minY + maxY) / 2 },
-                thickness: currentLine.thickness,
-                confidence: Math.max(currentLine.confidence, otherLine.confidence)
-              }
-            }
-            
-            used.add(j)
-          }
-        }
-        
-        merged.push(currentLine)
-      }
-      
-      return merged
-    }
-
-    // Trace from all endpoints
-    const endpoints = findEndpoints()
+    const used = new Set<number>()
     
-    for (const endpoint of endpoints) {
-      const key = `${endpoint.x},${endpoint.y}`
-      if (visited.has(key)) continue
+    for (let i = 0; i < lines.length; i++) {
+      if (used.has(i)) continue
       
-      const path = tracePath(endpoint.x, endpoint.y)
-      if (!path) continue
+      let current = lines[i]!
+      used.add(i)
       
-      const line = simplifyToLine(path.points)
-      if (!line) continue
+      for (let j = i + 1; j < lines.length; j++) {
+        if (used.has(j)) continue
+        
+        const other = lines[j]!
+        
+        if (current.start.y === current.end.y && other.start.y === other.end.y) {
+          if (Math.abs(current.start.y - other.start.y) <= 5) {
+            if (Math.abs(current.end.x - other.start.x) <= 5 || Math.abs(other.end.x - current.start.x) <= 5) {
+              current = {
+                start: { x: Math.min(current.start.x, other.start.x), y: Math.min(current.start.y, other.start.y) },
+                end: { x: Math.max(current.end.x, other.end.x), y: Math.min(current.start.y, other.start.y) },
+                thickness: 10,
+                confidence: Math.max(current.confidence, other.confidence)
+              }
+              used.add(j)
+            }
+          }
+        }
+        
+        if (current.start.x === current.end.x && other.start.x === other.end.x) {
+          if (Math.abs(current.start.x - other.start.x) <= 5) {
+            if (Math.abs(current.end.y - other.start.y) <= 5 || Math.abs(other.end.y - current.start.y) <= 5) {
+              current = {
+                start: { x: Math.min(current.start.x, other.start.x), y: Math.min(current.start.y, other.start.y) },
+                end: { x: Math.min(current.start.x, other.start.x), y: Math.max(current.end.y, other.end.y) },
+                thickness: 10,
+                confidence: Math.max(current.confidence, other.confidence)
+              }
+              used.add(j)
+            }
+          }
+        }
+      }
       
-      rawLines.push({
-        start: line.start,
-        end: line.end,
-        thickness: 8,
-        confidence: Math.min(0.95, 0.6 + line.length / 100)
-      })
+      const length = Math.sqrt(Math.pow(current.end.x - current.start.x, 2) + Math.pow(current.end.y - current.start.y, 2))
+      if (length >= 30) {
+        result.push(current)
+      }
     }
-
-    // Merge collinear adjacent lines
-    const mergedLines = mergeLines(rawLines)
     
-    return mergedLines
+    return result
   }
 
   private extractRooms(roomIconData: number[], scaleX: number, scaleY: number): TFJSRecognitionResult['rooms'] {
