@@ -264,11 +264,25 @@ export class FloorPlanRecognizer {
       }
     }
 
-    const components = this.findConnectedComponents(wallMask)
-    console.log('wall components found:', components.length, 'largest:', components.length > 0 ? components[0]?.pixels.length : 0)
+    const dilatedMask: boolean[][] = []
+    for (let y = 0; y < height; y++) {
+      dilatedMask[y] = []
+      for (let x = 0; x < width; x++) {
+        let dilated = wallMask[y]?.[x] ?? false
+        for (let dy = -2; dy <= 2; dy++) {
+          for (let dx = -2; dx <= 2; dx++) {
+            if (wallMask[y + dy]?.[x + dx]) dilated = true
+          }
+        }
+        dilatedMask[y]![x] = dilated
+      }
+    }
+
+    const components = this.findConnectedComponents(dilatedMask)
+    console.log('wall components after dilation:', components.length, 'largest:', components.length > 0 ? components[0]?.pixels.length : 0)
 
     const walls: TFJSRecognitionResult['walls'] = []
-    const minWallArea = 100
+    const minWallArea = 50
 
     for (const component of components) {
       if (component.pixels.length < minWallArea) continue
