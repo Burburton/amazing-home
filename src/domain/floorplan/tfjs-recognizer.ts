@@ -256,18 +256,9 @@ export class FloorPlanRecognizer {
     thickness: number
     confidence: number
   }> {
-    const endpoints: Array<{ x: number; y: number }> = []
     const height = skeleton.length
     const width = skeleton[0]?.length ?? 0
-
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        if (skeleton[y]?.[x] && this.countNeighbors(skeleton, x, y) === 1) {
-          endpoints.push({ x, y })
-        }
-      }
-    }
-
+    const visited = new Set<string>()
     const lines: Array<{
       start: { x: number; y: number }
       end: { x: number; y: number }
@@ -275,69 +266,122 @@ export class FloorPlanRecognizer {
       confidence: number
     }> = []
 
-    const usedEndpoints = new Set<number>()
-    const minLength = 15
-
-    for (let i = 0; i < endpoints.length; i++) {
-      if (usedEndpoints.has(i)) continue
-
-      const start = endpoints[i]
-      let bestEnd: { x: number; y: number } | null = null
-      let bestDistance = Infinity
-      let bestJ = -1
-
-      for (let j = i + 1; j < endpoints.length; j++) {
-        if (usedEndpoints.has(j)) continue
-
-        const end = endpoints[j]!
-        const distance = Math.sqrt(Math.pow(end.x - start!.x, 2) + Math.pow(end.y - start!.y, 2))
-
-        if (distance < bestDistance && distance >= minLength) {
-          const hasPath = this.checkPath(skeleton, start!, end)
-
-          if (hasPath) {
-            bestDistance = distance
-            bestEnd = end
-            bestJ = j
+    // Find all endpoints (pixels with exactly 1 neighbor)
+    const findEndpoints = (): Array<{ x: number; y: number }> => {
+      const endpoints: Array<{ x: number; y: number }> = []
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          if (skeleton[y]?.[x] && this.countNeighbors(skeleton, x, y) === 1) {
+            endpoints.push({ x, y })
           }
         }
       }
+      return endpoints
+    }
 
-      if (bestEnd) {
-        usedEndpoints.add(i)
-        usedEndpoints.add(bestJ)
-
-        const avgThickness = 8
-        const confidence = Math.min(0.95, 0.6 + bestDistance / 100)
-
-        lines.push({
-          start: start!,
-          end: bestEnd,
-          thickness: avgThickness,
-          confidence
-        })
+    // Trace path from a starting point, following the skeleton
+    const tracePath = (startX: number, startY: number): { points: Array<{ x: number; y: number }>; endX: number; endY: number } | null => {
+      const points: Array<{ x: number; y: number }> = []
+      let x = startX
+      let y = startY
+      let prevX = startX
+      let prevY = startY
+      
+      while (true) {
+        const key = `${x},${y}`
+        if (visited.has(key)) break
+        
+        visited.add(key)
+        points.push({ x, y })
+        
+        // Find next pixel on skeleton (exclude previous position)
+        const neighbors = getOrderedNeighbors(skeleton, x, y, prevX, prevY)
+        
+        if (neighbors.length === 0) {
+          // End of path (endpoint or branch)
+          break
+        }
+        
+        // Follow the direction with most continuity
+        const next = neighbors[0]
+        if (!next) break
+        prevX = x
+        prevY = y
+        x = next.x
+        y = next.y
+        
+        // Limit path length to prevent infinite loops
+        if (points.length > 500) break
       }
+      
+      if (points.length < 2) return null
+      
+      const lastPoint = points[points.length - 1]!
+      return { points, endX: lastPoint.x, endY: lastPoint.y }
+    }
+
+    // Get ordered neighbors (prioritize direction continuity)
+    const getOrderedNeighbors = (mask: boolean[][], x: number, y: number, prevX: number, prevY: number): Array<{ x: number; y: number }> => {
+      const neighbors: Array<{ x: number; y: number; priority: number }> = []
+      const dx = x - prevX
+      const dy = y - prevY
+      
+      for (let ndy = -1; ndy <= 1; ndy++) {
+        for (let ndx = -1; ndx <= 1; ndx++) {
+          if (ndx === 0 && ndy === 0) continue
+          const nx = x + ndx
+          const ny = y + ndy
+          if (ny >= 0 && ny < height && nx >= 0 && nx < width && mask[ny]?.[nx]) {
+            const key = `${nx},${ny}`
+            if (visited.has(key)) continue
+            
+            // Calculate direction continuity (dot product)
+            const priority = dx * ndx + dy * ndy
+            neighbors.push({ x: nx, y: ny, priority })
+          }
+        }
+      }
+      
+      // Sort by priority (prefer same direction)
+      neighbors.sort((a, b) => b.priority - a.priority)
+      return neighbors.map(n => ({ x: n.x, y: n.y }))
+    }
+
+    // Simplify path to line segment (find start and end points)
+    const simplifyToLine = (points: Array<{ x: number; y: number }>): { start: { x: number; y: number }; end: { x: number; y: number }; length: number } | null => {
+      if (points.length < 10) return null
+      
+      const start = points[0]!
+      const end = points[points.length - 1]!
+      const length = Math.sqrt(Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2))
+      
+      if (length < 20) return null
+      
+      return { start, end, length }
+    }
+
+    // Trace from all endpoints
+    const endpoints = findEndpoints()
+    
+    for (const endpoint of endpoints) {
+      const key = `${endpoint.x},${endpoint.y}`
+      if (visited.has(key)) continue
+      
+      const path = tracePath(endpoint.x, endpoint.y)
+      if (!path) continue
+      
+      const line = simplifyToLine(path.points)
+      if (!line) continue
+      
+      lines.push({
+        start: line.start,
+        end: line.end,
+        thickness: 8,
+        confidence: Math.min(0.95, 0.6 + line.length / 100)
+      })
     }
 
     return lines
-  }
-
-  private checkPath(skeleton: boolean[][], start: { x: number; y: number }, end: { x: number; y: number }): boolean {
-    const distance = Math.sqrt(Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2))
-    const steps = Math.ceil(distance / 3)
-
-    let onPath = 0
-    for (let s = 0; s <= steps; s++) {
-      const t = s / steps
-      const x = Math.round(start.x + (end.x - start.x) * t)
-      const y = Math.round(start.y + (end.y - start.y) * t)
-
-      if (x >= 0 && x < (skeleton[0]?.length ?? 0) && y >= 0 && y < skeleton.length) {
-        if (skeleton[y]?.[x]) onPath++
-      }
-    }
-
-    return onPath >= steps * 0.5
   }
 
   private extractRooms(roomIconData: number[], scaleX: number, scaleY: number): TFJSRecognitionResult['rooms'] {
