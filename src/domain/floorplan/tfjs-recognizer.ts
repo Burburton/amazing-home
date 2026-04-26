@@ -254,164 +254,54 @@ export class FloorPlanRecognizer {
     const wallThreshold = 0.3
     const width = 512
     const height = 512
-    const minWallLength = 20
-    const maxWallLength = 500
-    
-    const lines: Array<{
-      start: { x: number; y: number }
-      end: { x: number; y: number }
-      thickness: number
-      confidence: number
-    }> = []
-    
-    for (let y = 10; y < height - 10; y += 2) {
-      let startX = -1
-      for (let x = 10; x < width - 10; x++) {
+
+    const wallMask: boolean[][] = []
+    for (let y = 0; y < height; y++) {
+      wallMask[y] = []
+      for (let x = 0; x < width; x++) {
         const idx = y * width + x
-        const val = wallProb[idx] ?? 0
-        
-        if (val > wallThreshold && startX < 0) {
-          startX = x
-        } else if (val <= wallThreshold && startX >= 0) {
-          const len = x - startX
-          if (len >= minWallLength && len <= maxWallLength) {
-            lines.push({
-              start: { x: startX, y },
-              end: { x: x - 1, y },
-              thickness: 10,
-              confidence: 0.85
-            })
-          }
-          startX = -1
-        }
-      }
-      if (startX >= 0) {
-        const len = width - startX
-        if (len >= minWallLength && len <= maxWallLength) {
-          lines.push({
-            start: { x: startX, y },
-            end: { x: width - 1, y },
-            thickness: 10,
-            confidence: 0.85
-          })
-        }
-      }
-    }
-    
-    for (let x = 10; x < width - 10; x += 2) {
-      let startY = -1
-      for (let y = 10; y < height - 10; y++) {
-        const idx = y * width + x
-        const val = wallProb[idx] ?? 0
-        
-        if (val > wallThreshold && startY < 0) {
-          startY = y
-        } else if (val <= wallThreshold && startY >= 0) {
-          const len = y - startY
-          if (len >= minWallLength && len <= maxWallLength) {
-            lines.push({
-              start: { x, y: startY },
-              end: { x, y: y - 1 },
-              thickness: 10,
-              confidence: 0.85
-            })
-          }
-          startY = -1
-        }
-      }
-      if (startY >= 0) {
-        const len = height - startY
-        if (len >= minWallLength && len <= maxWallLength) {
-          lines.push({
-            start: { x, y: startY },
-            end: { x, y: height - 1 },
-            thickness: 10,
-            confidence: 0.85
-          })
-        }
+        wallMask[y]![x] = (wallProb[idx] ?? 0) > wallThreshold
       }
     }
 
-    console.log('raw wall segments before merge:', lines.length)
-    const merged = this.mergeWallLines(lines)
-    console.log('wall segments after merge:', merged.length)
-    
-    return merged.map(line => ({
-      start: { x: Math.round(line.start.x * scaleX), y: Math.round(line.start.y * scaleY) },
-      end: { x: Math.round(line.end.x * scaleX), y: Math.round(line.end.y * scaleY) },
-      thickness: Math.round(line.thickness * Math.max(scaleX, scaleY)),
-      confidence: line.confidence
-    }))
-  }
+    const components = this.findConnectedComponents(wallMask)
+    console.log('wall components found:', components.length, 'largest:', components.length > 0 ? components[0]?.pixels.length : 0)
 
-  private mergeWallLines(lines: Array<{
-    start: { x: number; y: number }
-    end: { x: number; y: number }
-    thickness: number
-    confidence: number
-  }>): Array<{
-    start: { x: number; y: number }
-    end: { x: number; y: number }
-    thickness: number
-    confidence: number
-  }> {
-    if (lines.length === 0) return lines
-    
-    const result: Array<{
-      start: { x: number; y: number }
-      end: { x: number; y: number }
-      thickness: number
-      confidence: number
-    }> = []
-    const used = new Set<number>()
-    
-    for (let i = 0; i < lines.length; i++) {
-      if (used.has(i)) continue
-      
-      let current = lines[i]!
-      used.add(i)
-      
-      for (let j = i + 1; j < lines.length; j++) {
-        if (used.has(j)) continue
-        
-        const other = lines[j]!
-        
-        if (current.start.y === current.end.y && other.start.y === other.end.y) {
-          if (Math.abs(current.start.y - other.start.y) <= 5) {
-            if (Math.abs(current.end.x - other.start.x) <= 5 || Math.abs(other.end.x - current.start.x) <= 5) {
-              current = {
-                start: { x: Math.min(current.start.x, other.start.x), y: Math.min(current.start.y, other.start.y) },
-                end: { x: Math.max(current.end.x, other.end.x), y: Math.min(current.start.y, other.start.y) },
-                thickness: 10,
-                confidence: Math.max(current.confidence, other.confidence)
-              }
-              used.add(j)
-            }
-          }
-        }
-        
-        if (current.start.x === current.end.x && other.start.x === other.end.x) {
-          if (Math.abs(current.start.x - other.start.x) <= 5) {
-            if (Math.abs(current.end.y - other.start.y) <= 5 || Math.abs(other.end.y - current.start.y) <= 5) {
-              current = {
-                start: { x: Math.min(current.start.x, other.start.x), y: Math.min(current.start.y, other.start.y) },
-                end: { x: Math.min(current.start.x, other.start.x), y: Math.max(current.end.y, other.end.y) },
-                thickness: 10,
-                confidence: Math.max(current.confidence, other.confidence)
-              }
-              used.add(j)
-            }
-          }
-        }
-      }
-      
-      const length = Math.sqrt(Math.pow(current.end.x - current.start.x, 2) + Math.pow(current.end.y - current.start.y, 2))
-      if (length >= 30) {
-        result.push(current)
+    const walls: TFJSRecognitionResult['walls'] = []
+    const minWallArea = 100
+
+    for (const component of components) {
+      if (component.pixels.length < minWallArea) continue
+
+      const xs = component.pixels.map(p => p.x)
+      const ys = component.pixels.map(p => p.y)
+      const minX = Math.min(...xs)
+      const maxX = Math.max(...xs)
+      const minY = Math.min(...ys)
+      const maxY = Math.max(...ys)
+
+      const w = maxX - minX + 1
+      const h = maxY - minY + 1
+
+      if (w > h * 2) {
+        walls.push({
+          start: { x: Math.round(minX * scaleX), y: Math.round((minY + maxY) / 2 * scaleY) },
+          end: { x: Math.round(maxX * scaleX), y: Math.round((minY + maxY) / 2 * scaleY) },
+          thickness: Math.round(h * scaleY),
+          confidence: 0.85
+        })
+      } else if (h > w * 2) {
+        walls.push({
+          start: { x: Math.round((minX + maxX) / 2 * scaleX), y: Math.round(minY * scaleY) },
+          end: { x: Math.round((minX + maxX) / 2 * scaleX), y: Math.round(maxY * scaleY) },
+          thickness: Math.round(w * scaleX),
+          confidence: 0.85
+        })
       }
     }
-    
-    return result
+
+    console.log('walls extracted:', walls.length)
+    return walls
   }
 
   private extractRooms(roomTypeData: number[], scaleX: number, scaleY: number, numChannels: number): TFJSRecognitionResult['rooms'] {
