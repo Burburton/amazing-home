@@ -473,20 +473,51 @@ export class FloorPlanRecognizer {
 
   private extractPolygon(pixels: Array<{ x: number; y: number }>): Array<{ x: number; y: number }> {
     if (pixels.length === 0) return []
-
-    const xs = pixels.map(p => p.x)
-    const ys = pixels.map(p => p.y)
-    const minX = Math.min(...xs)
-    const maxX = Math.max(...xs)
-    const minY = Math.min(...ys)
-    const maxY = Math.max(...ys)
-
-    return [
-      { x: minX, y: minY },
-      { x: maxX, y: minY },
-      { x: maxX, y: maxY },
-      { x: minX, y: maxY }
-    ]
+    
+    if (pixels.length < 10) {
+      // Simple bounding box for small components
+      const xs = pixels.map(p => p.x)
+      const ys = pixels.map(p => p.y)
+      const minX = Math.min(...xs)
+      const maxX = Math.max(...xs)
+      const minY = Math.min(...ys)
+      const maxY = Math.max(...ys)
+      
+      return [
+        { x: minX, y: minY },
+        { x: maxX, y: minY },
+        { x: maxX, y: maxY },
+        { x: minX, y: maxY }
+      ]
+    }
+    
+    // Convex Hull (Graham scan algorithm)
+    const cross = (o: { x: number; y: number }, a: { x: number; y: number }, b: { x: number; y: number }): number => {
+      return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x)
+    }
+    
+    const points = [...pixels]
+    
+    // Find lowest point (then sort by angle)
+    points.sort((a, b) => a.y - b.y || a.x - b.x)
+    
+    const start = points[0]!
+    const sorted = points.slice(1).sort((a, b) => {
+      const angleA = Math.atan2(a.y - start.y, a.x - start.x)
+      const angleB = Math.atan2(b.y - start.y, b.x - start.x)
+      return angleA - angleB
+    })
+    
+    const hull: Array<{ x: number; y: number }> = [start]
+    
+    for (const p of sorted) {
+      while (hull.length > 1 && cross(hull[hull.length - 2]!, hull[hull.length - 1]!, p) <= 0) {
+        hull.pop()
+      }
+      hull.push(p)
+    }
+    
+    return hull.length >= 4 ? hull : []
   }
 
   private extractIcons(roomIconData: number[], scaleX: number, scaleY: number): TFJSRecognitionResult['icons'] {
