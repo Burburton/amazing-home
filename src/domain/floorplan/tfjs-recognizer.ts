@@ -186,13 +186,19 @@ export class FloorPlanRecognizer {
     let wallProbMax = -Infinity
     let wallProbMin = Infinity
     let wallProbAboveThreshold = 0
+    let wallProbAbove06 = 0
+    let wallProbAbove07 = 0
+    let wallProbAbove08 = 0
     for (let i = 0; i < wallProb.length; i++) {
       const p = wallProb[i] ?? 0
       if (p > wallProbMax) wallProbMax = p
       if (p < wallProbMin) wallProbMin = p
       if (p > 0.35) wallProbAboveThreshold++
+      if (p > 0.6) wallProbAbove06++
+      if (p > 0.7) wallProbAbove07++
+      if (p > 0.8) wallProbAbove08++
     }
-    console.log('wallProb range:', wallProbMin, '-', wallProbMax, 'pixels above 0.35:', wallProbAboveThreshold)
+    console.log('wallProb range:', wallProbMin, '-', wallProbMax, 'pixels >0.35:', wallProbAboveThreshold, '>0.6:', wallProbAbove06, '>0.7:', wallProbAbove07, '>0.8:', wallProbAbove08)
 
     const iconRawData = Array.from(iconTensor.dataSync())
 
