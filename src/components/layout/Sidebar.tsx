@@ -2,6 +2,7 @@ import FurnitureLibrary from '@components/furniture/FurnitureLibrary'
 import LayoutSuggestionPanel from '@components/layout/LayoutSuggestionPanel'
 import VersionManager from '@components/layout/VersionManager'
 import WallDetectionPanel from '@components/shared/WallDetectionPanel'
+import WallCorrectionPanel from '@components/shared/WallCorrectionPanel'
 import { useFloorPlanStore } from '@store/useFloorPlanStore'
 import { FurnitureCategory } from '@domain/floorplan/types'
 
@@ -21,6 +22,8 @@ function Sidebar() {
       </div>
       
       <WallDetectionPanel />
+      
+      <WallCorrectionPanel />
       
       <FurnitureLibrary onSelect={handleFurnitureSelect} />
       

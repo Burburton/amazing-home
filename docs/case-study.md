@@ -110,13 +110,28 @@ User action → Zustand store → FloorPlanDocument update →
 | 016 | Product image reference cards | ✅ |
 | 017 | Furniture asset library with persistence | ✅ |
 
-### Phase 4 — Advanced Features (Features 018, 021, 022)
+### Phase 5 — Floor Plan Recognition Spike (Features 018-020)
 
 | Feature | Description | Status |
 |---------|-------------|--------|
 | 018 | Wall detection spike (experimental) | ✅ |
+| 019 | Wall detection review workflow | ✅ |
+| 020 | AI recognition correction UX | ✅ |
+
+### Phase 6 — Portfolio and Career Packaging (Features 021-024)
+
+| Feature | Description | Status |
+|---------|-------------|--------|
 | 021 | Case study page | ✅ |
 | 022 | Demo video/GIF walkthrough | ✅ |
+| 023 | Technical architecture writeup | ✅ |
+| 024 | Resume/portfolio packaging | ✅ |
+
+---
+
+## All Features Complete
+
+All 24 roadmap features have been implemented. The project is now portfolio-ready.
 
 ---
 
