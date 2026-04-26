@@ -9,6 +9,8 @@ function Header() {
   const [editingName, setEditingName] = useState(false)
   const [tempName, setTempName] = useState(document.project.name)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
+  const [undoFlash, setUndoFlash] = useState(false)
+  const [redoFlash, setRedoFlash] = useState(false)
   
   const handleSaveToStorage = React.useCallback(() => {
     try {
@@ -29,12 +31,18 @@ function Header() {
           e.preventDefault()
           if (e.shiftKey) {
             redo()
+            setRedoFlash(true)
+            setTimeout(() => setRedoFlash(false), 300)
           } else {
             undo()
+            setUndoFlash(true)
+            setTimeout(() => setUndoFlash(false), 300)
           }
         } else if (e.key === 'y') {
           e.preventDefault()
           redo()
+          setRedoFlash(true)
+          setTimeout(() => setRedoFlash(false), 300)
         } else if (e.key === 's') {
           e.preventDefault()
           handleSaveToStorage()
@@ -131,17 +139,31 @@ function Header() {
         
         <div className="flex items-center gap-1">
           <button
-            onClick={undo}
+            onClick={() => {
+              undo()
+              setUndoFlash(true)
+              setTimeout(() => setUndoFlash(false), 300)
+            }}
             disabled={!canUndo()}
-            className={`px-2 py-1 text-xs rounded transition-colors ${canUndo() ? 'bg-primary-500 hover:bg-primary-400' : 'bg-primary-700 opacity-50 cursor-not-allowed'}`}
+            className={`px-2 py-1 text-xs rounded transition-all ${
+              undoFlash ? 'bg-yellow-400 scale-110' :
+              canUndo() ? 'bg-primary-500 hover:bg-primary-400' : 'bg-primary-700 opacity-50 cursor-not-allowed'
+            }`}
             title="Undo (Ctrl+Z)"
           >
             ↶
           </button>
           <button
-            onClick={redo}
+            onClick={() => {
+              redo()
+              setRedoFlash(true)
+              setTimeout(() => setRedoFlash(false), 300)
+            }}
             disabled={!canRedo()}
-            className={`px-2 py-1 text-xs rounded transition-colors ${canRedo() ? 'bg-primary-500 hover:bg-primary-400' : 'bg-primary-700 opacity-50 cursor-not-allowed'}`}
+            className={`px-2 py-1 text-xs rounded transition-all ${
+              redoFlash ? 'bg-yellow-400 scale-110' :
+              canRedo() ? 'bg-primary-500 hover:bg-primary-400' : 'bg-primary-700 opacity-50 cursor-not-allowed'
+            }`}
             title="Redo (Ctrl+Shift+Z or Ctrl+Y)"
           >
             ↷
