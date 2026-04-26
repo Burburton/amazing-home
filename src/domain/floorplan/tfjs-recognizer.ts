@@ -523,16 +523,36 @@ export class FloorPlanRecognizer {
   private extractIcons(roomIconData: number[], scaleX: number, scaleY: number): TFJSRecognitionResult['icons'] {
     const icons: TFJSRecognitionResult['icons'] = []
     const iconThreshold = 0.5
-    const minSize = 10
-    const maxSize = 50
+    
+    // Icon-specific size ranges (pixels in 512x512 space)
+    const ICON_SIZE_RANGES: Record<string, { minW: number; maxW: number; minH: number; maxH: number }> = {
+      bed: { minW: 25, maxW: 80, minH: 20, maxH: 60 },
+      sofa: { minW: 30, maxW: 90, minH: 15, maxH: 45 },
+      table: { minW: 20, maxW: 70, minH: 20, maxH: 70 },
+      chair: { minW: 10, maxW: 30, minH: 10, maxH: 30 },
+      door: { minW: 8, maxW: 25, minH: 8, maxH: 25 },
+      window: { minW: 15, maxW: 40, minH: 5, maxH: 15 },
+      refrigerator: { minW: 15, maxW: 35, minH: 20, maxH: 50 },
+      sink: { minW: 10, maxW: 30, minH: 10, maxH: 30 },
+      toilet: { minW: 10, maxW: 25, minH: 15, maxH: 35 },
+      bathtub: { minW: 30, maxW: 80, minH: 20, maxH: 50 }
+    }
 
     for (let c = 0; c < ICON_TYPES.length; c++) {
+      const iconType = ICON_TYPES[c] ?? 'unknown'
+      const sizeRange = ICON_SIZE_RANGES[iconType] ?? { minW: 10, maxW: 50, minH: 10, maxH: 50 }
+      
       const classMask: boolean[][] = []
+      const scores: number[][] = []
+      
       for (let y = 0; y < 512; y++) {
         classMask[y] = []
+        scores[y] = []
         for (let x = 0; x < 512; x++) {
           const idx = c * 512 * 512 + y * 512 + x
-          classMask[y]![x] = (roomIconData[idx] ?? 0) > iconThreshold
+          const score = roomIconData[idx] ?? 0
+          classMask[y]![x] = score > iconThreshold
+          scores[y]![x] = score
         }
       }
 
@@ -544,7 +564,18 @@ export class FloorPlanRecognizer {
         const width = Math.max(...xs) - Math.min(...xs) + 1
         const height = Math.max(...ys) - Math.min(...ys) + 1
 
-        if (width < minSize || height < minSize || width > maxSize || height > maxSize) continue
+        // Check size range for icon type
+        if (width < sizeRange.minW || width > sizeRange.maxW || 
+            height < sizeRange.minH || height > sizeRange.maxH) continue
+
+        // Calculate average confidence from prediction scores
+        let avgScore = 0
+        for (const p of component.pixels) {
+          avgScore += scores[p.y]?.[p.x] ?? 0
+        }
+        avgScore /= component.pixels.length
+        
+        const confidence = Math.min(0.95, Math.max(0.5, avgScore))
 
         icons.push({
           bbox: {
@@ -553,8 +584,8 @@ export class FloorPlanRecognizer {
             width: Math.round(width * scaleX),
             height: Math.round(height * scaleY)
           },
-          type: ICON_TYPES[c] ?? 'unknown',
-          confidence: component.confidence
+          type: iconType,
+          confidence
         })
       }
     }
