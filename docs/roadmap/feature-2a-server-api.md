@@ -421,9 +421,13 @@ const resizeImage = async (imageUrl: string, maxSize = 512): Promise<string> => 
 
 1. ✅ Vercel deploy workflow created (user connects repo on Vercel dashboard)
 2. ✅ TF.js browser integration complete
-3. ⏳ Test TF.js inference with real floor plans
-4. 🔜 Phase 2B: Optimize TF.js model loading (lazy load, code splitting)
-5. 🔜 Phase 2C: Upload smaller model weights (e.g., TF2DeepFloorplan 37MB) to Vercel Blob
+3. ✅ Test TF.js inference - **fallback mode works**
+   - Result: Walls (2216), Rooms (1), Icons (1), Confidence 55%
+   - Processing time: 1ms
+   - Model URL 404, but fallback (pixel brightness) succeeded
+4. ⏳ Fix TF.js model URL (librarian searching)
+5. 🔜 Phase 2B: Optimize TF.js model loading (lazy load, code splitting)
+6. 🔜 Phase 2C: Upload smaller model weights to Vercel Blob
 
 ---
 
