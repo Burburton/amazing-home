@@ -168,8 +168,6 @@ export class FloorPlanRecognizer {
     const height = 512
     const width = 512
 
-    let wallProb: number[]
-
     const roomTypeRawData = Array.from(roomTypeTensor.dataSync())
     const roomTypeChannelData: number[][] = []
     for (let c = 0; c < roomTypeChannels; c++) {
@@ -183,7 +181,7 @@ export class FloorPlanRecognizer {
       roomTypeChannelData.push(channel)
     }
 
-    wallProb = this.extractWallChannelProbability(roomTypeChannelData)
+    const wallProb = this.extractWallChannelProbability(roomTypeChannelData)
 
     const iconRawData = Array.from(iconTensor.dataSync())
 
