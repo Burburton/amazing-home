@@ -151,79 +151,48 @@ export class FloorPlanRecognizer {
   }
 
   private postprocessPrediction(
-    roomIconMask: tf.Tensor,
-    wallMask: tf.Tensor,
+    roomTypeTensor: tf.Tensor,
+    iconTensor: tf.Tensor,
     originalWidth: number,
     originalHeight: number
   ): TFJSRecognitionResult {
-    const roomShape = roomIconMask.shape
-    const wallShape = wallMask.shape
-    console.log('roomIconMask shape:', roomShape)
-    console.log('wallMask shape:', wallShape)
+    const roomTypeShape = roomTypeTensor.shape
+    const iconShape = iconTensor.shape
+    console.log('roomTypeTensor shape:', roomTypeShape)
+    console.log('iconTensor shape:', iconShape)
 
-    const roomChannels = roomShape[3] ?? roomShape[2] ?? 1
-    const wallChannels = wallShape[3] ?? wallShape[2] ?? 1
-    console.log('roomChannels:', roomChannels, 'wallChannels:', wallChannels)
+    const roomTypeChannels = roomTypeShape[3] ?? roomTypeShape[2] ?? 1
+    const iconChannels = iconShape[3] ?? iconShape[2] ?? 1
+    console.log('roomTypeChannels:', roomTypeChannels, 'iconChannels:', iconChannels)
 
     const height = 512
     const width = 512
 
     let wallProb: number[]
 
-    if (wallChannels > 1) {
-      const wallRawData = Array.from(wallMask.dataSync())
-      const wallChannelData: number[][] = []
-      for (let c = 0; c < wallChannels; c++) {
-        const channel: number[] = []
-        for (let y = 0; y < height; y++) {
-          for (let x = 0; x < width; x++) {
-            const idx = c * height * width + y * width + x
-            channel.push(wallRawData[idx] ?? 0)
-          }
+    const roomTypeRawData = Array.from(roomTypeTensor.dataSync())
+    const roomTypeChannelData: number[][] = []
+    for (let c = 0; c < roomTypeChannels; c++) {
+      const channel: number[] = []
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const idx = c * height * width + y * width + x
+          channel.push(roomTypeRawData[idx] ?? 0)
         }
-        wallChannelData.push(channel)
       }
-
-      wallProb = this.softmaxAllChannels(wallChannelData)
-    } else {
-      const wallRawData = Array.from(wallMask.dataSync())
-      const minVal = Math.min(...wallRawData)
-      const maxVal = Math.max(...wallRawData)
-      console.log('wallRawData range:', minVal, '-', maxVal)
-
-      if (maxVal <= 1 && minVal >= 0) {
-        wallProb = wallRawData
-      } else {
-        wallProb = this.sigmoid(wallRawData)
-      }
+      roomTypeChannelData.push(channel)
     }
 
-    const roomRawData = Array.from(roomIconMask.dataSync())
-    let roomData: number[]
+    wallProb = this.extractWallChannelProbability(roomTypeChannelData)
 
-    if (roomChannels > 12) {
-      const roomChannelData: number[][] = []
-      for (let c = 0; c < roomChannels; c++) {
-        const channel: number[] = []
-        for (let y = 0; y < height; y++) {
-          for (let x = 0; x < width; x++) {
-            const idx = c * height * width + y * width + x
-            channel.push(roomRawData[idx] ?? 0)
-          }
-        }
-        roomChannelData.push(channel)
-      }
-      roomData = this.getChannel2Probability(roomChannelData)
-    } else {
-      roomData = roomRawData
-    }
+    const iconRawData = Array.from(iconTensor.dataSync())
 
     const scaleX = originalWidth / 512
     const scaleY = originalHeight / 512
 
     const walls = this.extractWallsFromProb(wallProb, scaleX, scaleY)
-    const rooms = this.extractRooms(roomData, scaleX, scaleY)
-    const icons = this.extractIcons(roomData, scaleX, scaleY)
+    const rooms = this.extractRooms(roomTypeRawData, scaleX, scaleY, roomTypeChannels)
+    const icons = this.extractIcons(iconRawData, scaleX, scaleY, iconChannels)
 
     const overallConfidence = walls.length > 0
       ? walls.reduce((sum, w) => sum + w.confidence, 0) / walls.length
@@ -237,46 +206,29 @@ export class FloorPlanRecognizer {
     }
   }
 
-  private softmaxAllChannels(channelData: number[][]): number[] {
+  private extractWallChannelProbability(channelData: number[][]): number[] {
     const numChannels = channelData.length
     const size = channelData[0]?.length ?? 0
     const result: number[] = []
 
+    // Apply softmax per pixel across all room type channels
     for (let i = 0; i < size; i++) {
       const values = channelData.map(c => c[i] ?? 0)
       const maxVal = Math.max(...values)
       const expValues = values.map(v => Math.exp(v - maxVal))
       const sumExp = expValues.reduce((a, b) => a + b, 0)
 
-      let maxIdx = 0
-      let maxProb = 0
-      for (let c = 0; c < numChannels; c++) {
-        const prob = expValues[c]! / sumExp
-        if (prob > maxProb) {
-          maxProb = prob
-          maxIdx = c
-        }
+      // Get probability for channel 2 (wall class in ROOM_TYPES)
+      const wallChannelIdx = 2
+      if (wallChannelIdx < numChannels) {
+        const wallProb = expValues[wallChannelIdx]! / sumExp
+        result.push(wallProb)
+      } else {
+        result.push(0)
       }
-      result.push(maxIdx === 2 ? maxProb : 0)
     }
 
     return result
-  }
-
-  private getChannel2Probability(channelData: number[][]): number[] {
-    const size = channelData[0]?.length ?? 0
-    const wallChannel = channelData[2] ?? []
-    const result: number[] = []
-
-    for (let i = 0; i < size; i++) {
-      result.push(wallChannel[i] ?? 0)
-    }
-
-    return result
-  }
-
-  private sigmoid(values: number[]): number[] {
-    return values.map(v => 1 / (1 + Math.exp(-v)))
   }
 
   private extractWallsFromProb(wallProb: number[], scaleX: number, scaleY: number): TFJSRecognitionResult['walls'] {
@@ -441,18 +393,19 @@ export class FloorPlanRecognizer {
     return result
   }
 
-  private extractRooms(roomIconData: number[], scaleX: number, scaleY: number): TFJSRecognitionResult['rooms'] {
+  private extractRooms(roomTypeData: number[], scaleX: number, scaleY: number, numChannels: number): TFJSRecognitionResult['rooms'] {
     const rooms: TFJSRecognitionResult['rooms'] = []
     const roomThreshold = 0.4
     const minArea = 500
+    const effectiveRoomTypes = numChannels > ROOM_TYPES.length ? ROOM_TYPES : ROOM_TYPES.slice(0, numChannels)
 
-    for (let c = 0; c < ROOM_TYPES.length; c++) {
+    for (let c = 0; c < effectiveRoomTypes.length; c++) {
       const classMask: boolean[][] = []
       for (let y = 0; y < 512; y++) {
         classMask[y] = []
         for (let x = 0; x < 512; x++) {
           const idx = c * 512 * 512 + y * 512 + x
-          classMask[y]![x] = (roomIconData[idx] ?? 0) > roomThreshold
+          classMask[y]![x] = (roomTypeData[idx] ?? 0) > roomThreshold
         }
       }
 
@@ -577,9 +530,10 @@ export class FloorPlanRecognizer {
     return hull.length >= 4 ? hull : []
   }
 
-  private extractIcons(roomIconData: number[], scaleX: number, scaleY: number): TFJSRecognitionResult['icons'] {
+  private extractIcons(iconData: number[], scaleX: number, scaleY: number, numChannels: number): TFJSRecognitionResult['icons'] {
     const icons: TFJSRecognitionResult['icons'] = []
     const iconThreshold = 0.5
+    const effectiveIconTypes = numChannels > ICON_TYPES.length ? ICON_TYPES : ICON_TYPES.slice(0, numChannels)
     
     // Icon-specific size ranges (pixels in 512x512 space)
     const ICON_SIZE_RANGES: Record<string, { minW: number; maxW: number; minH: number; maxH: number }> = {
@@ -595,8 +549,8 @@ export class FloorPlanRecognizer {
       bathtub: { minW: 30, maxW: 80, minH: 20, maxH: 50 }
     }
 
-    for (let c = 0; c < ICON_TYPES.length; c++) {
-      const iconType = ICON_TYPES[c] ?? 'unknown'
+    for (let c = 0; c < effectiveIconTypes.length; c++) {
+      const iconType = effectiveIconTypes[c] ?? 'unknown'
       const sizeRange = ICON_SIZE_RANGES[iconType] ?? { minW: 10, maxW: 50, minH: 10, maxH: 50 }
       
       const classMask: boolean[][] = []
@@ -607,7 +561,7 @@ export class FloorPlanRecognizer {
         scores[y] = []
         for (let x = 0; x < 512; x++) {
           const idx = c * 512 * 512 + y * 512 + x
-          const score = roomIconData[idx] ?? 0
+          const score = iconData[idx] ?? 0
           classMask[y]![x] = score > iconThreshold
           scores[y]![x] = score
         }
