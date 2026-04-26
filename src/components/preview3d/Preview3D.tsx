@@ -4,6 +4,22 @@ import { useFloorPlanStore } from '@store/useFloorPlanStore'
 import { wallToMeshData, computeBoundingBox } from '@domain/floorplan/geometry'
 import { getCatalogEntry } from '@domain/floorplan/furniture-catalog'
 
+const FURNITURE_COLORS: Record<string, string> = {
+  sofa: '#8b5cf6',
+  bed: '#ec4899',
+  dining_table: '#f59e0b',
+  chair: '#10b981',
+  desk: '#3b82f6',
+  cabinet: '#6366f1',
+  coffee_table: '#14b8a6',
+}
+
+const WALL_COLOR_NON_LOAD = '#6b7280'
+const WALL_COLOR_LOAD = '#9ca3af'
+const WALL_COLOR_SELECTED = '#0ea5e9'
+const FLOOR_COLOR = '#e5e5e5'
+const EMPTY_PLACEHOLDER_COLOR = '#6b7280'
+
 function Scene() {
   const { document, selectedFurnitureId } = useFloorPlanStore()
   const walls = document.walls
@@ -13,16 +29,6 @@ function Scene() {
 
   const wallMeshes = walls.map(wall => wallToMeshData(wall, ceilingHeight))
 
-  const furnitureColorMap: Record<string, string> = {
-    sofa: '#8b5cf6',
-    bed: '#ec4899',
-    dining_table: '#f59e0b',
-    chair: '#10b981',
-    desk: '#3b82f6',
-    cabinet: '#6366f1',
-    coffee_table: '#14b8a6',
-  }
-
   if (walls.length === 0 && furniture.length === 0) {
     return (
       <>
@@ -31,7 +37,7 @@ function Scene() {
         <ambientLight intensity={0.5} />
         <directionalLight position={[200, 400, 200]} intensity={1} />
         <Box args={[100, 100, 100]} position={[0, 50, 0]}>
-          <meshStandardMaterial color="#6b7280" />
+          <meshStandardMaterial color={EMPTY_PLACEHOLDER_COLOR} />
         </Box>
       </>
     )
@@ -53,25 +59,28 @@ function Scene() {
         position={[boundingBox.centerX, 0, boundingBox.centerY]}
         rotation={[-Math.PI / 2, 0, 0]}
       >
-        <meshStandardMaterial color="#e5e5e5" />
+        <meshStandardMaterial color={FLOOR_COLOR} />
       </Plane>
       
-      {wallMeshes.map((mesh, index) => (
-        <Box
-          key={walls[index]?.id || index}
-          args={mesh.args}
-          position={mesh.position}
-          rotation={mesh.rotation}
-        >
-          <meshStandardMaterial 
-            color={walls[index]?.isLoadBearing ? '#9ca3af' : '#6b7280'}
-          />
-        </Box>
-      ))}
+      {wallMeshes.map((mesh, index) => {
+        const wall = walls[index]
+        return (
+          <Box
+            key={wall?.id || index}
+            args={mesh.args}
+            position={mesh.position}
+            rotation={mesh.rotation}
+          >
+            <meshStandardMaterial 
+              color={wall?.isLoadBearing ? WALL_COLOR_LOAD : WALL_COLOR_NON_LOAD}
+            />
+          </Box>
+        )
+      })}
       
       {furniture.map(item => {
         const catalogEntry = getCatalogEntry(item.category)
-        const color = furnitureColorMap[item.category] || '#10b981'
+        const color = FURNITURE_COLORS[item.category] || '#10b981'
         const height = (catalogEntry?.defaultElevation ?? 50) / 100
         const yPosition = height / 2
         
@@ -83,7 +92,7 @@ function Scene() {
             rotation={[0, -(item.rotation * Math.PI / 180), 0]}
           >
             <meshStandardMaterial 
-              color={selectedFurnitureId === item.id ? '#0ea5e9' : color}
+              color={selectedFurnitureId === item.id ? WALL_COLOR_SELECTED : color}
               opacity={selectedFurnitureId === item.id ? 0.9 : 1}
             />
           </Box>
