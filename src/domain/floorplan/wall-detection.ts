@@ -4,6 +4,7 @@ interface DetectedLine {
   start: Point2D
   end: Point2D
   thickness: number
+  isParallelPair?: boolean
 }
 
 interface DetectionOptions {
@@ -17,6 +18,8 @@ interface DetectionOptions {
   minLineLength?: number
   maxLineGap?: number
   angleTolerance?: number
+  maxWallThickness?: number
+  minWallLength?: number
 }
 
 const DEFAULT_OPTIONS: Required<DetectionOptions> = {
@@ -30,6 +33,8 @@ const DEFAULT_OPTIONS: Required<DetectionOptions> = {
   minLineLength: 50,
   maxLineGap: 10,
   angleTolerance: 5,
+  maxWallThickness: 30,
+  minWallLength: 80,
 }
 
 export function detectWallsFromImage(
@@ -56,13 +61,19 @@ export function detectWallsFromImage(
     opts.houghThreshold, opts.minLineLength, opts.maxLineGap)
   
   const filteredLines = filterLines(lines, opts.minLength, opts.angleTolerance)
-  const mergedLines = mergeNearbyLines(filteredLines, 5)
   
-  return mergedLines.map((line, index) => ({
+  const furnitureLines = detectFurnitureLines(filteredLines, opts.minWallLength)
+  const nonFurnitureLines = filteredLines.filter(l => !furnitureLines.includes(l))
+  
+  const mergedParallelLines = mergeParallelLines(nonFurnitureLines, opts.maxWallThickness)
+  
+  const finalLines = mergeNearbyLines(mergedParallelLines, 5)
+  
+  return finalLines.map((line, index) => ({
     id: `detected-wall-${index}`,
     start: line.start,
     end: line.end,
-    thickness: opts.wallThickness,
+    thickness: line.thickness || opts.wallThickness,
     isLoadBearing: false,
   }))
 }
@@ -406,6 +417,211 @@ function filterLines(
     
     return isHorizontal || isVertical
   })
+}
+
+function detectFurnitureLines(lines: DetectedLine[], minWallLength: number): DetectedLine[] {
+  const furnitureLines: DetectedLine[] = []
+  
+  const horizontalLines = lines.filter(l => 
+    Math.abs(l.start.y - l.end.y) < 3 && 
+    getLineLength(l) < minWallLength
+  )
+  const verticalLines = lines.filter(l => 
+    Math.abs(l.start.x - l.end.x) < 3 && 
+    getLineLength(l) < minWallLength
+  )
+  
+  const closedRectangles = findClosedRectangles(horizontalLines, verticalLines)
+  
+  for (const rect of closedRectangles) {
+    furnitureLines.push(...rect.lines)
+  }
+  
+  return furnitureLines
+}
+
+function findClosedRectangles(
+  horizontalLines: DetectedLine[],
+  verticalLines: DetectedLine[]
+): { lines: DetectedLine[], width: number, height: number }[] {
+  const rectangles: { lines: DetectedLine[], width: number, height: number }[] = []
+  
+  const hSorted = [...horizontalLines].sort((a, b) => a.start.y - b.start.y)
+  const vSorted = [...verticalLines].sort((a, b) => a.start.x - b.start.x)
+  
+  for (let i = 0; i < hSorted.length; i++) {
+    const topLine = hSorted[i]!
+    
+    for (let j = i + 1; j < hSorted.length; j++) {
+      const bottomLine = hSorted[j]!
+      
+      const yDistance = bottomLine.start.y - topLine.start.y
+      if (yDistance > 300 || yDistance < 20) continue
+      
+      const overlapX = getLineOverlapX(topLine, bottomLine)
+      if (overlapX < 20) continue
+      
+      for (const vLine of vSorted) {
+        const leftMatch = Math.abs(vLine.start.x - topLine.start.x) < 10 &&
+                          Math.abs(vLine.end.x - bottomLine.start.x) < 10 &&
+                          Math.abs(vLine.start.y - topLine.start.y) < 10 &&
+                          Math.abs(vLine.end.y - bottomLine.start.y) < 10
+        
+        if (!leftMatch) continue
+        
+        const rightX = topLine.end.x
+        for (const vLine2 of vSorted) {
+          const rightMatch = Math.abs(vLine2.start.x - rightX) < 10 &&
+                             Math.abs(vLine2.end.x - bottomLine.end.x) < 10 &&
+                             Math.abs(vLine2.start.y - topLine.start.y) < 10 &&
+                             Math.abs(vLine2.end.y - bottomLine.start.y) < 10
+          
+          if (rightMatch && vLine !== vLine2) {
+            rectangles.push({
+              lines: [topLine, bottomLine, vLine, vLine2],
+              width: rightX - topLine.start.x,
+              height: yDistance,
+            })
+          }
+        }
+      }
+    }
+  }
+  
+  return rectangles
+}
+
+function getLineOverlapX(line1: DetectedLine, line2: DetectedLine): number {
+  const min1 = Math.min(line1.start.x, line1.end.x)
+  const max1 = Math.max(line1.start.x, line1.end.x)
+  const min2 = Math.min(line2.start.x, line2.end.x)
+  const max2 = Math.max(line2.start.x, line2.end.x)
+  
+  return Math.max(0, Math.min(max1, max2) - Math.max(min1, min2))
+}
+
+function mergeParallelLines(lines: DetectedLine[], maxWallThickness: number): DetectedLine[] {
+  const horizontal = lines.filter(l => Math.abs(l.start.y - l.end.y) < 3)
+  const vertical = lines.filter(l => Math.abs(l.start.x - l.end.x) < 3)
+  
+  const mergedHorizontal = mergeHorizontalParallelPairs(horizontal, maxWallThickness)
+  const mergedVertical = mergeVerticalParallelPairs(vertical, maxWallThickness)
+  
+  return [...mergedHorizontal, ...mergedVertical]
+}
+
+function mergeHorizontalParallelPairs(lines: DetectedLine[], maxThickness: number): DetectedLine[] {
+  const result: DetectedLine[] = []
+  const used = new Set<number>()
+  
+  const sorted = [...lines].sort((a, b) => a.start.y - b.start.y)
+  
+  for (let i = 0; i < sorted.length; i++) {
+    if (used.has(i)) continue
+    
+    const line1 = sorted[i]!
+    
+    for (let j = i + 1; j < sorted.length; j++) {
+      if (used.has(j)) continue
+      
+      const line2 = sorted[j]!
+      
+      const yDistance = Math.abs(line2.start.y - line1.start.y)
+      
+      if (yDistance <= maxThickness && yDistance >= 2) {
+        const overlapX = getLineOverlapX(line1, line2)
+        const line1Len = getLineLength(line1)
+        const line2Len = getLineLength(line2)
+        
+        if (overlapX >= line1Len * 0.5 && overlapX >= line2Len * 0.5) {
+          const avgY = Math.round((line1.start.y + line2.start.y) / 2)
+          const minX = Math.min(line1.start.x, line1.end.x, line2.start.x, line2.end.x)
+          const maxX = Math.max(line1.start.x, line1.end.x, line2.start.x, line2.end.x)
+          
+          result.push({
+            start: { x: minX, y: avgY },
+            end: { x: maxX, y: avgY },
+            thickness: yDistance,
+          })
+          
+          used.add(i)
+          used.add(j)
+          break
+        }
+      }
+    }
+    
+    if (!used.has(i)) {
+      result.push({ ...line1 })
+    }
+  }
+  
+  return result
+}
+
+function mergeVerticalParallelPairs(lines: DetectedLine[], maxThickness: number): DetectedLine[] {
+  const result: DetectedLine[] = []
+  const used = new Set<number>()
+  
+  const sorted = [...lines].sort((a, b) => a.start.x - b.start.x)
+  
+  for (let i = 0; i < sorted.length; i++) {
+    if (used.has(i)) continue
+    
+    const line1 = sorted[i]!
+    
+    for (let j = i + 1; j < sorted.length; j++) {
+      if (used.has(j)) continue
+      
+      const line2 = sorted[j]!
+      
+      const xDistance = Math.abs(line2.start.x - line1.start.x)
+      
+      if (xDistance <= maxThickness && xDistance >= 2) {
+        const overlapY = getLineOverlapY(line1, line2)
+        const line1Len = getLineLength(line1)
+        const line2Len = getLineLength(line2)
+        
+        if (overlapY >= line1Len * 0.5 && overlapY >= line2Len * 0.5) {
+          const avgX = Math.round((line1.start.x + line2.start.x) / 2)
+          const minY = Math.min(line1.start.y, line1.end.y, line2.start.y, line2.end.y)
+          const maxY = Math.max(line1.start.y, line1.end.y, line2.start.y, line2.end.y)
+          
+          result.push({
+            start: { x: avgX, y: minY },
+            end: { x: avgX, y: maxY },
+            thickness: xDistance,
+          })
+          
+          used.add(i)
+          used.add(j)
+          break
+        }
+      }
+    }
+    
+    if (!used.has(i)) {
+      result.push({ ...line1 })
+    }
+  }
+  
+  return result
+}
+
+function getLineOverlapY(line1: DetectedLine, line2: DetectedLine): number {
+  const min1 = Math.min(line1.start.y, line1.end.y)
+  const max1 = Math.max(line1.start.y, line1.end.y)
+  const min2 = Math.min(line2.start.y, line2.end.y)
+  const max2 = Math.max(line2.start.y, line2.end.y)
+  
+  return Math.max(0, Math.min(max1, max2) - Math.max(min1, min2))
+}
+
+function getLineLength(line: DetectedLine): number {
+  return Math.sqrt(
+    (line.end.x - line.start.x) ** 2 + 
+    (line.end.y - line.start.y) ** 2
+  )
 }
 
 function mergeNearbyLines(lines: DetectedLine[], tolerance: number): DetectedLine[] {

@@ -21,6 +21,8 @@ function WallDetectionPanel() {
   const [cannyHigh, setCannyHigh] = useState(150)
   const [houghThreshold, setHoughThreshold] = useState(100)
   const [maxLineGap, setMaxLineGap] = useState(10)
+  const [maxWallThickness, setMaxWallThickness] = useState(30)
+  const [minWallLength, setMinWallLength] = useState(80)
   
   const [candidateWalls, setCandidateWalls] = useState<CandidateWall[]>([])
   
@@ -50,6 +52,8 @@ function WallDetectionPanel() {
         maxLineGap,
         angleTolerance,
         minLength: minLineLength,
+        maxWallThickness,
+        minWallLength,
       }
       
       const walls = detectWallsFromImage(img, options)
@@ -249,6 +253,40 @@ function WallDetectionPanel() {
                 />
                 <div className="text-xs text-gray-400">
                   Connects gaps within this distance
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">
+                  Max Wall Thickness ({maxWallThickness}px)
+                </label>
+                <input
+                  type="range"
+                  min={5}
+                  max={50}
+                  value={maxWallThickness}
+                  onChange={(e) => setMaxWallThickness(parseInt(e.target.value))}
+                  className="w-full"
+                />
+                <div className="text-xs text-gray-400">
+                  Merge parallel lines within this distance (thick walls)
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">
+                  Min Wall Length ({minWallLength}px)
+                </label>
+                <input
+                  type="range"
+                  min={50}
+                  max={200}
+                  value={minWallLength}
+                  onChange={(e) => setMinWallLength(parseInt(e.target.value))}
+                  className="w-full"
+                />
+                <div className="text-xs text-gray-400">
+                  Filter out short lines (furniture)
                 </div>
               </div>
             </div>
