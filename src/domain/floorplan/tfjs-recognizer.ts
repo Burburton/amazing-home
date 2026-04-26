@@ -183,28 +183,13 @@ export class FloorPlanRecognizer {
 
     const wallProb = this.extractWallChannelProbability(roomTypeChannelData)
 
-    let wallProbMax = -Infinity
-    let wallProbMin = Infinity
-    let wallProbAbove05 = 0
-    let wallProbAbove06 = 0
-    for (let i = 0; i < wallProb.length; i++) {
-      const p = wallProb[i] ?? 0
-      if (p > wallProbMax) wallProbMax = p
-      if (p < wallProbMin) wallProbMin = p
-      if (p > 0.5) wallProbAbove05++
-      if (p > 0.6) wallProbAbove06++
-    }
-    console.log('wallProb range:', wallProbMin.toFixed(4), '-', wallProbMax.toFixed(4), 'pixels >0.5:', wallProbAbove05, '>0.6:', wallProbAbove06)
-
     const iconRawData = Array.from(iconTensor.dataSync())
 
     const scaleX = originalWidth / 512
     const scaleY = originalHeight / 512
 
     const walls = this.extractWallsFromProb(wallProb, scaleX, scaleY)
-    console.log('walls extracted:', walls.length)
     const rooms = this.extractRooms(roomTypeRawData, scaleX, scaleY, roomTypeChannels)
-    console.log('rooms extracted:', rooms.length, 'room types:', rooms.map(r => r.type))
     const icons = this.extractIcons(iconRawData, scaleX, scaleY, iconChannels)
 
     const overallConfidence = walls.length > 0
@@ -280,16 +265,13 @@ export class FloorPlanRecognizer {
     }
 
     const wallTiles: boolean[][] = []
-    let wallTileCount = 0
     for (let ty = 0; ty < tilesPerCol; ty++) {
       wallTiles[ty] = []
       for (let tx = 0; tx < tilesPerRow; tx++) {
         const avg = tileAvg[ty]?.[tx] ?? 0
         wallTiles[ty]![tx] = avg > wallThreshold
-        if (avg > wallThreshold) wallTileCount++
       }
     }
-    console.log('wall tiles count:', wallTileCount, 'out of', tilesPerRow * tilesPerCol)
 
     const walls: TFJSRecognitionResult['walls'] = []
 
@@ -339,7 +321,6 @@ export class FloorPlanRecognizer {
       }
     }
 
-    console.log('walls extracted:', walls.length)
     return walls
   }
 
