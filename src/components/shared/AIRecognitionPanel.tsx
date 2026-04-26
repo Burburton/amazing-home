@@ -8,15 +8,17 @@ import {
   DetectedRoom,
   DetectedIcon,
 } from '@services/recognitionApi'
+import { localRecognizer, LocalRecognitionResult } from '@services/localRecognizer'
 
-type DetectionMode = 'local' | 'api'
+type DetectionMode = 'api' | 'local'
 
 function AIRecognitionPanel() {
-  const [mode, setMode] = useState<DetectionMode>('api')
+  const [mode, setMode] = useState<DetectionMode>('local')
   const [isRecognizing, setIsRecognizing] = useState(false)
-  const [result, setResult] = useState<RecognitionResult | null>(null)
+  const [result, setResult] = useState<RecognitionResult | LocalRecognitionResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [apiStatus, setApiStatus] = useState<'unknown' | 'ok' | 'error'>('unknown')
+  const [tfjsLoaded, setTfjsLoaded] = useState(false)
   
   const [detectWalls, setDetectWalls] = useState(true)
   const [detectRooms, setDetectRooms] = useState(true)
@@ -30,6 +32,15 @@ function AIRecognitionPanel() {
     setApiStatus(healthy ? 'ok' : 'error')
   }
   
+  const loadTfjsModel = async () => {
+    try {
+      await localRecognizer.loadModel()
+      setTfjsLoaded(true)
+    } catch (err) {
+      setError('Failed to load TF.js model')
+    }
+  }
+  
   const handleRecognize = async () => {
     if (!hasImage) return
     
@@ -38,22 +49,48 @@ function AIRecognitionPanel() {
     setResult(null)
     
     try {
-      const imageUrl = document.sourceImage!.objectUrl
-      const width = document.sourceImage!.width
-      const height = document.sourceImage!.height
-      
-      const recognitionResult = await recognizeFromImageUrl(
-        imageUrl,
-        width,
-        height,
-        {
-          detect_walls: detectWalls,
-          detect_rooms: detectRooms,
-          detect_icons: detectIcons,
+      if (mode === 'local') {
+        if (!tfjsLoaded) {
+          await loadTfjsModel()
         }
-      )
-      
-      setResult(recognitionResult)
+        
+        const img = new window.Image()
+        img.src = document.sourceImage!.objectUrl
+        
+        await new Promise<void>((resolve) => {
+          img.onload = () => resolve()
+          img.onerror = () => resolve()
+        })
+        
+        const canvas = window.document.createElement('canvas')
+        canvas.width = img.width || 512
+        canvas.height = img.height || 512
+        const ctx = canvas.getContext('2d')
+        if (!ctx) throw new Error('Canvas context unavailable')
+        ctx.drawImage(img, 0, 0)
+        
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+        const recognitionResult = await localRecognizer.recognize(imageData)
+        
+        setResult(recognitionResult)
+      } else {
+        const imageUrl = document.sourceImage!.objectUrl
+        const width = document.sourceImage!.width
+        const height = document.sourceImage!.height
+        
+        const recognitionResult = await recognizeFromImageUrl(
+          imageUrl,
+          width,
+          height,
+          {
+            detect_walls: detectWalls,
+            detect_rooms: detectRooms,
+            detect_icons: detectIcons,
+          }
+        )
+        
+        setResult(recognitionResult)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Recognition failed')
     } finally {
@@ -64,7 +101,7 @@ function AIRecognitionPanel() {
   const handleApplyWalls = () => {
     if (!result?.walls) return
     
-    result.walls.forEach((wall: DetectedWall) => {
+    result.walls.forEach((wall: DetectedWall | { start: { x: number; y: number }; end: { x: number; y: number }; thickness: number; confidence: number }) => {
       addWall(wall.start, wall.end)
     })
     
@@ -95,6 +132,18 @@ function AIRecognitionPanel() {
           </button>
         </div>
       </div>
+      
+      {mode === 'local' && (
+        <div className="tfjs-status">
+          {!tfjsLoaded ? (
+            <button onClick={loadTfjsModel}>
+              Load TF.js Model
+            </button>
+          ) : (
+            <span className="status-badge ok">✓ TF.js Loaded</span>
+          )}
+        </div>
+      )}
       
       {mode === 'api' && (
         <div className="api-status">

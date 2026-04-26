@@ -382,7 +382,7 @@ const resizeImage = async (imageUrl: string, maxSize = 512): Promise<string> => 
 | 5 | 2A-04: Browser integration | ✅ **Completed** |
 | 6-7 | 2A-05: Optimization | Pending |
 
-### Implementation Summary (Day 1)
+### Implementation Summary (Day 1-2)
 
 **Files Created**:
 - `api/recognize.py` - Main recognition endpoint (placeholder + production modes)
@@ -391,20 +391,39 @@ const resizeImage = async (imageUrl: string, maxSize = 512): Promise<string> => 
 - `api/inference.py` - Preprocess, inference, postprocess pipeline
 - `api/requirements.txt` - Python dependencies (torch, scipy, scikit-image)
 - `src/services/recognitionApi.ts` - Browser API client
-- `src/components/shared/AIRecognitionPanel.tsx` - UI panel
+- `src/services/localRecognizer.ts` - TF.js browser inference wrapper
+- `src/domain/floorplan/tfjs-recognizer.ts` - TensorFlow.js model loader
+- `src/components/shared/AIRecognitionPanel.tsx` - UI panel (supports API + Local modes)
 - `vercel.json` - Vercel deployment config
+- `.github/workflows/vercel-deploy.yml` - GitHub Actions auto-deploy
 
 **Verification**:
 - Tests: 86/86 passing ✅
 - Typecheck: Clean ✅
-- Build: Successful (1.4MB bundle) ✅
+- Build: Successful (3.2MB bundle with TF.js) ✅
 - Git: Pushed to main ✅
 
-**Next Steps**:
-1. User runs `vercel` to deploy (requires Vercel login)
-2. Test placeholder API on Vercel
-3. Upload CubiCasa5k weights to Blob Storage
-4. Switch to production mode (`USE_PLACEHOLDER=false`)
+### Strategy Change (Day 2)
+
+**Finding**: CubiCasa5k model weights are **500-600MB** (from librarian research), exceeding Vercel Blob Storage limit.
+
+**New Strategy**: Use TensorFlow.js browser inference as primary method.
+
+| Mode | Weight | Location | Pros | Cons |
+|------|--------|----------|------|------|
+| **API (placeholder)** | N/A | Vercel | Free, no download | Returns mock data |
+| **TF.js Local** | ~37MB | Browser | Offline, real inference | Large bundle (~2MB TF.js) |
+| **CubiCasa5k (future)** | 500MB | Railway | Full 44-class accuracy | Requires paid hosting |
+
+**Current Default**: `Local` mode (TF.js fallback inference)
+
+### Next Steps
+
+1. ✅ Vercel deploy workflow created (user connects repo on Vercel dashboard)
+2. ✅ TF.js browser integration complete
+3. ⏳ Test TF.js inference with real floor plans
+4. 🔜 Phase 2B: Optimize TF.js model loading (lazy load, code splitting)
+5. 🔜 Phase 2C: Upload smaller model weights (e.g., TF2DeepFloorplan 37MB) to Vercel Blob
 
 ---
 
